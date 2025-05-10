@@ -12,8 +12,5 @@ services:
     ports:
       - "8002:8000"
     env_file:
-      - .env  # ✅ Charge les variables depuis .env
-    command: >
-      bash -c "until nc -z -v -w30 $DB_HOST $DB_PORT;
-      do echo 'Waiting for MySQL...'; sleep 1; done;
-      python manage.py runserver 0.0.0.0:8000"
+      - .env
+    command: ./entrypoint.sh
