@@ -27,4 +27,4 @@ RUN python manage.py collectstatic --noinput || true
 EXPOSE 8000
 
 # Commande pour démarrer Django après que MySQL soit prêt
-CMD ["bash", "-c", "until nc -z -v -w30 mysql 3306; do echo 'Waiting for MySQL...'; sleep 1; done; python manage.py runserver 0.0.0.0:8000"]
+CMD ["bash", "-c", "until nc -z -v -w30 mysql 3306; do echo 'Waiting for MySQL...'; sleep 1; done; python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
