@@ -26,7 +26,8 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-^f*&ik!m%v7mf=p%xr#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# Update ALLOWED_HOSTS
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
 
 # Application definition
 
@@ -176,14 +177,41 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS settings for Next.js frontend
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',  # Next.js dev server
-    'http://localhost:3000',  # Next.js dev server
+    'https://chat-beast.onrender.com',
+    'https://89.116.111.200:8002',
 ]
 
 if FRONTEND_URL:
     CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# Add CSRF settings
+CSRF_TRUSTED_ORIGINS = [
+    'https://chat-beast.onrender.com',
+    'https://89.116.111.200:8002',
+]
+
 # Django REST Framework and JWT configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
