@@ -11,19 +11,13 @@ services:
       - .:/app
     ports:
       - "8002:8000"
-    networks:
-      - app-network
     environment:
-      DB_NAME: chatdb          # <<< nouvelle base de données
+      DB_NAME: chatdb
       DB_USER: server
       DB_PASSWORD: 4734
-      DB_HOST: mysql
-      DB_PORT: 3306
+      DB_HOST: host.docker.internal
+      DB_PORT: 3308
     command: >
-      bash -c "until nc -z -v -w30 mysql 3306;
+      bash -c "until nc -z -v -w30 host.docker.internal 3308;
       do echo 'Waiting for MySQL...'; sleep 1; done;
       python manage.py runserver 0.0.0.0:8000"
-
-networks:
-  app-network:
-    external: true
