@@ -179,6 +179,10 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',  # Next.js dev server
     'http://localhost:3000',  # Next.js dev server
 ]
+
+if FRONTEND_URL:
+    CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
+
 CORS_ALLOW_CREDENTIALS = True
 # Django REST Framework and JWT configuration
 REST_FRAMEWORK = {
