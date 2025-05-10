@@ -18,6 +18,7 @@ services:
       DB_HOST: host.docker.internal
       DB_PORT: 3308
     command: >
-      bash -c "until nc -z -v -w30 host.docker.internal 3308;
+      bash -c "until nc -z -v -w30 172.17.0.1 3308;
       do echo 'Waiting for MySQL...'; sleep 1; done;
       python manage.py runserver 0.0.0.0:8000"
+        
