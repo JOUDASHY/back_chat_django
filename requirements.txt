@@ -7,6 +7,7 @@ cryptography==44.0.2
 Django==5.2
 django-allauth==65.7.0
 django-cors-headers==4.7.0
+django-redis==5.4.0
 djangorestframework==3.16.0
 djangorestframework_simplejwt==5.5.0
 idna==3.10
@@ -23,6 +24,7 @@ pyOpenSSL==25.0.0
 python-dotenv==1.1.0
 redis==6.0.0
 requests==2.32.3
+requests-oauthlib==2.0.0
 six==1.17.0
 sqlparse==0.5.3
 typing_extensions==4.13.2
