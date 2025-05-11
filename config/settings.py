@@ -58,7 +58,7 @@ INSTALLED_APPS = [
 # Session
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 SESSION_COOKIE_AGE = 1800  # 30 minutes
-SESSION_COOKIE_SECURE = False  # True en production
+SESSION_COOKIE_SECURE = True  # True en production
 SESSION_COOKIE_SAMESITE = 'Lax'  # Pour les API cross-domain
 
 # Logging
@@ -177,10 +177,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
-   
     'https://chat-beast.onrender.com',
-    'http://89.116.111.200:8002',
-    'https://89.116.111.200:8002',
+    'https://back.brine.pro'
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -200,13 +198,11 @@ CORS_ALLOW_HEADERS = [
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-  
     'https://chat-beast.onrender.com',
-    'http://89.116.111.200:8002',
-    'https://89.116.111.200:8002',
+    'https://back.brine.pro'
 ]
 
-ALLOWED_HOSTS = ['*']  # Pour le développement, à restreindre en production
+ALLOWED_HOSTS = ['back.brine.pro', 'chat-beast.onrender.com']
 
 if FRONTEND_URL:
     CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
@@ -232,7 +228,24 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
+# Security settings
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True') == 'True'
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'True') == 'True'
+CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'True') == 'True'
 
+BACKEND_URL = os.getenv('BACKEND_URL')
+FRONTEND_URL = os.getenv('FRONTEND_URL')
+
+CORS_ALLOWED_ORIGINS = [FRONTEND_URL]
+if BACKEND_URL:
+    CORS_ALLOWED_ORIGINS.append(BACKEND_URL)
+
+CSRF_TRUSTED_ORIGINS = [FRONTEND_URL]
+if BACKEND_URL:
+    CSRF_TRUSTED_ORIGINS.append(BACKEND_URL)
+
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
 
 # Django REST Framework and JWT configuration
 REST_FRAMEWORK = {
