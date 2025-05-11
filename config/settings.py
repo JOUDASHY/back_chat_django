@@ -177,14 +177,40 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
-    'https://chat-beast.onrender.com',  # Frontend URL
-    'https://89.116.111.200:8002',      # Backend URL
+    'http://chat-beast.onrender.com',
+    'https://chat-beast.onrender.com',
+    'http://89.116.111.200:8002',
+    'https://89.116.111.200:8002',
 ]
+
+CORS_ALLOW_CREDENTIALS = True
+
+# Ajouter ces paramètres supplémentaires
+CORS_ORIGIN_ALLOW_ALL = False
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://chat-beast.onrender.com',
+    'https://chat-beast.onrender.com',
+    'http://89.116.111.200:8002',
+    'https://89.116.111.200:8002',
+]
+
+ALLOWED_HOSTS = ['*']  # Pour le développement, à restreindre en production
 
 if FRONTEND_URL:
     CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
 
-CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
