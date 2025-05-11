@@ -381,3 +381,10 @@ EMAIL_PORT=  os.environ.get('EMAIL_PORT')
 EMAIL_HOST_USER=os.environ.get('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD=os.environ.get('EMAIL_HOST_PASSWORD')
 EMAIL_USE_TLS =  os.environ.get('EMAIL_USE_TLS')
+
+
+
+print(f"Redis Host: {REDIS_HOST}")
+print(f"Redis Port: {REDIS_PORT}")
+print(f"Redis DB: {REDIS_DB}")
+print(f"Redis Password: {REDIS_PASSWORD}")
