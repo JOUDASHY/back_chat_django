@@ -156,11 +156,8 @@ CACHES = {
 # Channels / WebSocket configuration
 from urllib.parse import quote_plus
 
-REDIS_URL = (
-    f"redis://:{quote_plus(REDIS_PASSWORD)}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
-    if REDIS_PASSWORD
-    else f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
-)
+REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+
 
 CHANNEL_LAYERS = {
     "default": {
