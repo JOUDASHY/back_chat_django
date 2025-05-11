@@ -1,10 +1,8 @@
+# docker-compose.yml
 version: '3.8'
-
 services:
   django:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     container_name: chat_django
     restart: unless-stopped
     volumes:
@@ -14,7 +12,7 @@ services:
     env_file:
       - .env
     command: ./entrypoint.sh
-  
+
   redis:
     image: redis:alpine
     ports:

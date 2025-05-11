@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',  # Add this line
     'rest_framework_simplejwt',
     'corsheaders',
-
+    'channels',
     # allauth
     'allauth',
     'allauth.account',
@@ -134,9 +134,6 @@ SIMPLE_JWT = {
 }
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
-REDIS_HOST = 'localhost'
-REDIS_PORT = 6379
-REDIS_DB = 0
 
 # Redis Configuration
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
@@ -155,6 +152,23 @@ CACHES = {
             'SOCKET_TIMEOUT': 5,
         }
     }
+}
+# Channels / WebSocket configuration
+from urllib.parse import quote_plus
+
+REDIS_URL = (
+    f"redis://:{quote_plus(REDIS_PASSWORD)}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+    if REDIS_PASSWORD
+    else f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+)
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [REDIS_URL],
+        },
+    },
 }
 
 # Use Redis for session backend
