@@ -177,7 +177,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
-    'http://chat-beast.onrender.com',
+   
     'https://chat-beast.onrender.com',
     'http://89.116.111.200:8002',
     'https://89.116.111.200:8002',
@@ -200,7 +200,7 @@ CORS_ALLOW_HEADERS = [
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    'http://chat-beast.onrender.com',
+  
     'https://chat-beast.onrender.com',
     'http://89.116.111.200:8002',
     'https://89.116.111.200:8002',
@@ -232,11 +232,7 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
-# CSRF settings
-CSRF_TRUSTED_ORIGINS = [
-    'https://chat-beast.onrender.com',  # Frontend URL
-    'https://89.116.111.200:8002',      # Backend URL
-]
+
 
 # Django REST Framework and JWT configuration
 REST_FRAMEWORK = {
