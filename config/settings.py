@@ -138,6 +138,29 @@ REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
 REDIS_DB = 0
 
+# Redis Configuration
+REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
+REDIS_DB = int(os.getenv('REDIS_DB', 0))
+REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', None)
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'PASSWORD': REDIS_PASSWORD,
+            'SOCKET_CONNECT_TIMEOUT': 5,
+            'SOCKET_TIMEOUT': 5,
+        }
+    }
+}
+
+# Use Redis for session backend
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -247,6 +270,35 @@ if BACKEND_URL:
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
 
+# Get host from URL
+def get_hosts_from_urls():
+    hosts = set()
+    for url in [os.getenv('FRONTEND_URL', ''), os.getenv('BACKEND_URL', '')]:
+        if url:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            if parsed.netloc:
+                hosts.add(parsed.netloc.split(':')[0])
+    return list(hosts)
+
+# Combine explicit ALLOWED_HOSTS with hosts from URLs
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') + get_hosts_from_urls()
+ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS if host.strip()]
+
+# CORS settings
+CORS_ALLOWED_ORIGINS = []
+if os.getenv('FRONTEND_URL'):
+    CORS_ALLOWED_ORIGINS.append(os.getenv('FRONTEND_URL'))
+if os.getenv('BACKEND_URL'):
+    CORS_ALLOWED_ORIGINS.append(os.getenv('BACKEND_URL'))
+
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
+
+# Security settings based on environment
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False').lower() == 'true'
+CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False').lower() == 'true'
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
+
 # Django REST Framework and JWT configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -262,6 +314,23 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
+# Environment settings
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
+
+# Security settings - only enable SSL redirect in production
+SECURE_SSL_REDIRECT = (
+    os.getenv('SECURE_SSL_REDIRECT', 'False').lower() == 'true' 
+    and ENVIRONMENT == 'production'
+)
+CSRF_COOKIE_SECURE = (
+    os.getenv('CSRF_COOKIE_SECURE', 'False').lower() == 'true'
+    and ENVIRONMENT == 'production'
+)
+SESSION_COOKIE_SECURE = (
+    os.getenv('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
+    and ENVIRONMENT == 'production'
+)
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
