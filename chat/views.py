@@ -42,11 +42,18 @@ from .serializers import (
     ConversationSerializer, UserSerializer, CustomTokenObtainPairSerializer
 )
 from .pusher_client import pusher_client
-from .utils import update_online_status, redis_client, redis_available
+from .utils import update_online_status, redis_available
 
 # Configure logger and environment
 logger = logging.getLogger(__name__)
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
+redis_client = redis.Redis(
+    host=settings.REDIS_HOST,
+    port=settings.REDIS_PORT,
+    db=settings.REDIS_DB,
+    password=settings.REDIS_PASSWORD
+)
 
 class GoogleAuthView(APIView):
     def get(self, request):
