@@ -175,10 +175,10 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'  # Add this line to define where static f
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS settings for Next.js frontend
+# CORS settings
 CORS_ALLOWED_ORIGINS = [
-    'https://chat-beast.onrender.com',
-    'https://89.116.111.200:8002',
+    'https://chat-beast.onrender.com',  # Frontend URL
+    'https://89.116.111.200:8002',      # Backend URL
 ]
 
 if FRONTEND_URL:
@@ -206,10 +206,10 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
-# Add CSRF settings
+# CSRF settings
 CSRF_TRUSTED_ORIGINS = [
-    'https://chat-beast.onrender.com',
-    'https://89.116.111.200:8002',
+    'https://chat-beast.onrender.com',  # Frontend URL
+    'https://89.116.111.200:8002',      # Backend URL
 ]
 
 # Django REST Framework and JWT configuration
