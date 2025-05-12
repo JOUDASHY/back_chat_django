@@ -1,15 +1,36 @@
 import redis
 import pusher
+import logging
 from django.conf import settings
+from redis.retry import Retry
+from redis.backoff import ExponentialBackoff
+from redis.exceptions import ConnectionError, AuthenticationError, ResponseError
+
+logger = logging.getLogger(__name__)
 
 # Tentative de connexion à Redis, avec gestion d'erreur
+retry = Retry(ExponentialBackoff(), 3)
 try:
-    redis_client = redis.StrictRedis(host='redis', port=6379, db=0)
+    logger.debug(f"Tentative de connexion à Redis: {settings.REDIS_HOST}:{settings.REDIS_PORT}")
+    redis_client = redis.StrictRedis(
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
+        db=settings.REDIS_DB,
+        password=settings.REDIS_PASSWORD,
+        decode_responses=True,
+        retry=retry,
+        socket_timeout=5,
+        socket_connect_timeout=5
+    )
+    # Test the connection
+    redis_client.ping()
     redis_available = True
-except redis.exceptions.ConnectionError:
+    logger.info("Connexion Redis établie avec succès")
+except (ConnectionError, AuthenticationError, ResponseError) as e:
     redis_client = None
     redis_available = False
-    print("Avertissement: Redis n'est pas disponible. Les fonctionnalités de statut en ligne sont désactivées.")
+    logger.error(f"Erreur de connexion Redis: {str(e)}")
+    logger.debug(f"Détails de configuration Redis: host={settings.REDIS_HOST}, port={settings.REDIS_PORT}, password={'*' * len(settings.REDIS_PASSWORD if settings.REDIS_PASSWORD else '')}")
 
 # Configuration de Pusher
 pusher_client = pusher.Pusher(
