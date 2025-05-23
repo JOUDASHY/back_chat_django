@@ -1,5 +1,5 @@
-# docker-compose.yml
 version: '3.8'
+
 services:
   django:
     build: .
@@ -12,6 +12,10 @@ services:
     env_file:
       - .env
     command: ./entrypoint.sh
+    depends_on:
+      - redis
+    networks:
+      - chatnet
 
   redis:
     image: redis:alpine
@@ -20,6 +24,11 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    networks:
+      - chatnet
 
 volumes:
   redis_data:
+
+networks:
+  chatnet:
