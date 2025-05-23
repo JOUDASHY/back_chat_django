@@ -139,7 +139,6 @@ MEDIA_ROOT = BASE_DIR / 'media'
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 0))
-REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', None)
 
 CACHES = {
     'default': {
@@ -147,7 +146,6 @@ CACHES = {
         'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}',
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'PASSWORD': REDIS_PASSWORD,
             'SOCKET_CONNECT_TIMEOUT': 5,
             'SOCKET_TIMEOUT': 5,
         }
@@ -387,4 +385,3 @@ EMAIL_USE_TLS =  os.environ.get('EMAIL_USE_TLS')
 print(f"Redis Host: {REDIS_HOST}")
 print(f"Redis Port: {REDIS_PORT}")
 print(f"Redis DB: {REDIS_DB}")
-print(f"Redis Password: {REDIS_PASSWORD}")
