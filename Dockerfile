@@ -8,22 +8,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     mariadb-client \
     netcat-openbsd \
+    git \
   && rm -rf /var/lib/apt/lists/*
 
-# Configurer le répertoire de travail
-WORKDIR /app
+# Créer un utilisateur non-root
+RUN useradd -m -s /bin/bash appuser
 
-# Copier d'abord l'entrypoint et définir les permissions
-COPY entrypoint.sh /app/
-RUN chmod +x /app/entrypoint.sh
+# Configurer le répertoire de travail et les permissions
+WORKDIR /app
+COPY . /app/
+
+# Définir les permissions
+RUN chown -R appuser:appuser /app \
+    && chmod +x /app/entrypoint.sh
 
 # Installer les dépendances Python
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install gunicorn
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install gunicorn
 
-# Copier le reste du code
-COPY . .
+# Passer à l'utilisateur non-root
+USER appuser
 
 EXPOSE 8000
 

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Convertir les retours à la ligne en format Unix
+set -e
+
 # Attendre que MySQL soit prêt
 echo "⏳ Waiting for MySQL at $DB_HOST:$DB_PORT ..."
 until nc -z -v -w30 "$DB_HOST" "$DB_PORT"; do
