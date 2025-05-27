@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Installer les dépendances nécessaires, y compris mariadb-client et netcat
+# Installer les dépendances nécessaires
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     default-libmysqlclient-dev \
@@ -12,17 +12,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Configurer le répertoire de travail
 WORKDIR /app
+
+# Copier d'abord l'entrypoint et définir les permissions
+COPY entrypoint.sh /app/
+RUN chmod +x /app/entrypoint.sh
+
+# Installer les dépendances Python
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install gunicorn
 
-COPY . ./
-RUN python manage.py collectstatic --noinput || true
-
-# Add execute permission to entrypoint.sh
-COPY entrypoint.sh ./
-RUN chmod +x entrypoint.sh
+# Copier le reste du code
+COPY . .
 
 EXPOSE 8000
 
-CMD ["./entrypoint.sh"]
+CMD ["/app/entrypoint.sh"]

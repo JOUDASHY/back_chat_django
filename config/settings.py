@@ -37,7 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',
+    'django.contrib.staticfiles',  # Déjà inclus ici
     'django.contrib.sites',  # Nécessaire pour allauth
 
     # Third-party
@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'channels',
+    'whitenoise.runserver_nostatic',  # Ajouter whitenoise
     # allauth
     'allauth',
     'allauth.account',
@@ -160,9 +161,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Serve media files in development
 if DEBUG:
-    INSTALLED_APPS += ['django.contrib.staticfiles']
-    MIDDLEWARE.append('whitenoise.middleware.WhiteNoiseMiddleware')
-    
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')  # Ajouter après SecurityMiddleware
+
 # Security settings
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = True
