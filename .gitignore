@@ -14,3 +14,7 @@
 media/
 media/*
 !media/.gitkeep
+
+# Python cache files
+__pycache__/
+*.pyc
