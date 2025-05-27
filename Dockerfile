@@ -11,12 +11,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Copier et installer les requirements d'abord
 COPY requirements.txt ./
-
-# Installer les dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install gunicorn
+    && pip install gunicorn whitenoise
 
+# Copier le reste du projet après
 COPY . .
 
 EXPOSE 8000
