@@ -10,13 +10,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     netcat-openbsd \
   && rm -rf /var/lib/apt/lists/*
 
-# Configurer le répertoire de travail
 WORKDIR /app
-COPY . /app/
+COPY requirements.txt ./
 
 # Installer les dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install gunicorn whitenoise
+    && pip install gunicorn
+
+COPY . .
 
 EXPOSE 8000
 

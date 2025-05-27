@@ -39,8 +39,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
-
     # Third-party
+    'whitenoise.runserver_nostatic',  # Ajouter ici
     'rest_framework',
     'rest_framework.authtoken',  # Add this line
     'rest_framework_simplejwt',
