@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# Installer les dépendances nécessaires
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     default-libmysqlclient-dev \
@@ -11,13 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# Copier et installer les requirements d'abord
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install gunicorn whitenoise
+    && pip install gunicorn
 
-# Copier le reste du projet après
 COPY . .
 
 EXPOSE 8000
