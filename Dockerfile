@@ -16,7 +16,7 @@ COPY . /app/
 
 # Installer les dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install gunicorn
+    && pip install gunicorn whitenoise
 
 EXPOSE 8000
 

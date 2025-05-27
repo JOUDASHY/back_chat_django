@@ -37,8 +37,8 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',  # Déjà inclus ici
-    'django.contrib.sites',  # Nécessaire pour allauth
+    'django.contrib.staticfiles',
+    'django.contrib.sites',
 
     # Third-party
     'rest_framework',
@@ -46,7 +46,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'channels',
-    'whitenoise.runserver_nostatic',  # Ajouter whitenoise
+    'whitenoise',  # Ajouter whitenoise ici
     # allauth
     'allauth',
     'allauth.account',
@@ -78,11 +78,11 @@ LOGGING = {
 }
 
 MIDDLEWARE = [
-    # CORS
+    'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Ajouter juste après SecurityMiddleware
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     # Default Django middleware
-    'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
      'allauth.account.middleware.AccountMiddleware',  # Ajoutez cette ligne
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -158,10 +158,6 @@ CORS_EXPOSE_HEADERS = ['content-type', 'x-csrftoken']
 # Media settings
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
-
-# Serve media files in development
-if DEBUG:
-    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')  # Ajouter après SecurityMiddleware
 
 # Security settings
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
