@@ -19,10 +19,10 @@ RUN pip install gunicorn
 COPY . ./
 RUN python manage.py collectstatic --noinput || true
 
+# Add execute permission to entrypoint.sh
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
 EXPOSE 8000
 
-CMD ["bash", "-c", "\
-  until nc -z -v -w30 mysql 3306; do echo 'Waiting for MySQL...'; sleep 1; done; \
-  python manage.py migrate --noinput && \
-  python manage.py collectstatic --noinput && \
-  gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"]
+CMD ["./entrypoint.sh"]
