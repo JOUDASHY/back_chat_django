@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && pip install gunicorn
 
 COPY . .
+RUN ls -la /app
 
 EXPOSE 8000
 

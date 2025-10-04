@@ -6,7 +6,7 @@ services:
     container_name: chat_django
     restart: unless-stopped
     volumes:
-      - ./:/app:delegated
+      - .:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     ports:
