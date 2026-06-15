@@ -472,6 +472,21 @@ class GroupChatView(generics.ListCreateAPIView):
             # Sérialisation avec contexte
             message_data = MessageSerializer(msg, context={'request': self.request}).data
             pusher_client.trigger(f"group-chat-{room_id}", 'new-message', message_data)
+            
+            # Notifier la sidebar de tous les participants
+            conversation_update = {
+                'conversation': {
+                    'id': room.id,
+                    'lastMessage': msg.content,
+                    'timestamp': msg.timestamp.isoformat(),
+                }
+            }
+            for participant in room.participants.all():
+                pusher_client.trigger(
+                    f"user-{participant.id}-conversations",
+                    'new-message',
+                    conversation_update
+                )
         except IntegrityError as e:
             raise e
 
@@ -519,6 +534,26 @@ class PrivateChatView(generics.ListCreateAPIView):
             a, b = sorted([self.request.user.id, other_id])
             pusher_client.trigger(f"private-chat-{a}-{b}", 'new-message', message_data)
             
+            # Notifier la sidebar des deux utilisateurs
+            conversation_id = int(f"{a}{b}")
+            conversation_update = {
+                'conversation': {
+                    'id': conversation_id,
+                    'lastMessage': msg.content,
+                    'timestamp': msg.timestamp.isoformat(),
+                }
+            }
+            pusher_client.trigger(
+                f"user-{self.request.user.id}-conversations",
+                'new-message',
+                conversation_update
+            )
+            pusher_client.trigger(
+                f"user-{other_id}-conversations",
+                'new-message',
+                conversation_update
+            )
+            
             # Mettre à jour last_seen pour l'expéditeur
             self.request.user.profile.last_seen = timezone.now()
             self.request.user.profile.save()
@@ -531,6 +566,33 @@ class PrivateChatView(generics.ListCreateAPIView):
         except Exception as e:
             print(f"Unexpected error: {e}")
             raise e
+
+
+class MarkMessagesReadView(APIView):
+    """Marquer tous les messages reçus d'un utilisateur comme lus"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id):
+        now = timezone.now()
+        updated_count = Message.objects.filter(
+            sender_id=user_id,
+            recipient=request.user,
+            is_read=False
+        ).update(is_read=True, read_at=now)
+
+        if updated_count > 0:
+            # Notifier le sender en temps réel que ses messages ont été lus
+            a, b = sorted([request.user.id, user_id])
+            pusher_client.trigger(
+                f"private-chat-{a}-{b}",
+                'messages-read',
+                {
+                    'reader_id': request.user.id,
+                    'read_at': now.isoformat()
+                }
+            )
+
+        return Response({'marked_read': updated_count})
 
 
 class RegisterView(APIView):

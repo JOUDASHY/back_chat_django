@@ -100,6 +100,8 @@ class Message(models.Model):
     )
     content = models.TextField()
     attachment = models.FileField(upload_to='message_attachments/', null=True, blank=True)
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

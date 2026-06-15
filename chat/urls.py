@@ -14,7 +14,8 @@ from .views import (
     UpdateProfileView,
     CurrentUserView,
     PublicUserProfileView,HandleDisconnectView,
-    UpdateOnlineStatusView  # Ajoutez cette ligne
+    UpdateOnlineStatusView,
+    MarkMessagesReadView,
 )
 
 app_name = 'chat'
@@ -29,6 +30,7 @@ urlpatterns = [
 
     # Chat privé avec un autre utilisateur
     path('private/<int:user_id>/', PrivateChatView.as_view(), name='private-chat'),
+    path('private/<int:user_id>/read/', MarkMessagesReadView.as_view(), name='mark-messages-read'),
 
     # Chat de groupe dans une room
     path('group/<int:room_id>/', GroupChatView.as_view(), name='group-chat'),
