@@ -98,7 +98,7 @@ class Message(models.Model):
         null=True,
         blank=True
     )
-    content = models.TextField()
+    content = models.TextField(blank=True, default='')
     attachment = models.FileField(upload_to='message_attachments/', null=True, blank=True)
     is_read = models.BooleanField(default=False)
     read_at = models.DateTimeField(null=True, blank=True)

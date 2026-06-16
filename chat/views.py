@@ -358,30 +358,47 @@ class ConversationCreateView(APIView):
         except User.DoesNotExist:
             return Response({'detail': 'Utilisateur introuvable'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Vérifie si une conversation existe déjà
-        existing_conversation = Message.objects.filter(
+        # ID synthétique de la conversation privée
+        a, b = sorted([user.id, other_user.id])
+        conversation_id = int(f"{a}{b}")
+
+        # Récupérer le dernier message existant (si la conversation existe déjà)
+        last_message = Message.objects.filter(
             (Q(sender=user) & Q(recipient=other_user)) |
-            (Q(sender=other_user) & Q(recipient=user))
-        ).first()
+            (Q(sender=other_user) & Q(recipient=user)),
+            room__isnull=True
+        ).order_by('-timestamp').first()
 
-        if existing_conversation:
-            return Response({'detail': 'Conversation déjà existante'}, status=status.HTTP_200_OK)
+        user_serializer = UserSerializer(other_user, context={'request': request})
 
-        # Crée un premier message vide pour initialiser la conversation
+        if last_message:
+            # Conversation existante — retourner les données complètes
+            unread_count = Message.objects.filter(
+                sender=other_user, recipient=user, is_read=False
+            ).count()
+            return Response({
+                'id': conversation_id,
+                'name': other_user.username,
+                'lastMessage': last_message.content,
+                'timestamp': last_message.timestamp,
+                'isGroup': False,
+                'userId': other_user.id,
+                'unreadCount': unread_count,
+                'lastMessageSeen': last_message.sender == user or last_message.is_read,
+                'lastMessageSenderId': last_message.sender_id,
+                'lastMessageIsRead': last_message.is_read,
+                'user': user_serializer.data
+            }, status=status.HTTP_200_OK)
+
+        # Nouvelle conversation — créer un message d'initialisation
         message = Message.objects.create(
             sender=user,
             recipient=other_user,
             content="Conversation démarrée"
         )
 
-        # Sérialiser l'utilisateur avec son profil
-        user_serializer = UserSerializer(
-            other_user,
-            context={'request': request}
-        )
-
         return Response({
-            'id': int(f"{user.id}{other_user.id}"),
+            'id': conversation_id,
             'name': other_user.username,
             'lastMessage': message.content,
             'timestamp': message.timestamp,
@@ -403,23 +420,46 @@ class ConversationListView(APIView):
         user = request.user
 
         # Conversations de groupe
-        rooms = Room.objects.filter(participants=user)
+        rooms = Room.objects.filter(participants=user).prefetch_related('participants__profile')
         group_data = []
         for room in rooms:
             last = (
                 Message.objects
                 .filter(room=room)
                 .order_by('-timestamp')
-                .values('content', 'timestamp')
+                .values('content', 'timestamp', 'sender_id', 'is_read')
                 .first()
             )
             if last:
+                # Participants avec leurs avatars (exclut l'user courant)
+                participants = room.participants.exclude(id=user.id).select_related('profile')
+                participants_data = [
+                    {
+                        'id': p.id,
+                        'username': p.username,
+                        'profile': {
+                            'image': request.build_absolute_uri(p.profile.image.url)
+                                     if p.profile.image else None,
+                        }
+                    }
+                    for p in participants
+                ]
+                unread_count = Message.objects.filter(
+                    room=room, is_read=False
+                ).exclude(sender=user).count()
+
                 group_data.append({
                     'id': room.id,
                     'name': room.name,
                     'lastMessage': last['content'],
                     'timestamp': last['timestamp'],
                     'isGroup': True,
+                    'user': None,
+                    'participants': participants_data,
+                    'unreadCount': unread_count,
+                    'lastMessageSeen': last['sender_id'] == user.id or last['is_read'],
+                    'lastMessageSenderId': last['sender_id'],
+                    'lastMessageIsRead': last['is_read'],
                 })
 
         # Conversations privées
@@ -718,6 +758,24 @@ class PrivateChatView(generics.ListCreateAPIView):
         except Exception as e:
             print(f"Unexpected error: {e}")
             raise e
+
+
+class TypingView(APIView):
+    """Diffuser un indicateur de frappe via Pusher."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        is_typing  = request.data.get('isTyping', False)
+        channel    = request.data.get('channel', '')   # ex: "private-chat-1-2" ou "group-chat-5"
+        if not channel:
+            return Response({'detail': 'channel requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        pusher_client.trigger(channel, 'typing', {
+            'userId':    request.user.id,
+            'username':  request.user.username,
+            'isTyping':  is_typing,
+        })
+        return Response({'ok': True})
 
 
 class MarkMessagesReadView(APIView):

@@ -13,11 +13,12 @@ from .views import (
     ConversationCreateView,
     UpdateProfileView,
     CurrentUserView,
-    PublicUserProfileView,HandleDisconnectView,
+    PublicUserProfileView, HandleDisconnectView,
     UpdateOnlineStatusView,
     MarkMessagesReadView,
     RoomListCreateView,
     RoomDetailUpdateView,
+    TypingView,
 )
 
 app_name = 'chat'
@@ -60,4 +61,5 @@ urlpatterns = [
     # Création et listing de rooms
     path('rooms/', RoomListCreateView.as_view(), name='rooms'),
     path('rooms/<int:pk>/', RoomDetailUpdateView.as_view(), name='room-detail'),
+    path('typing/', TypingView.as_view(), name='typing'),
 ]

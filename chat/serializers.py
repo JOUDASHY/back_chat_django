@@ -104,6 +104,7 @@ class ConversationSerializer(serializers.Serializer):
 
 class MessageSerializer(serializers.ModelSerializer):
     sender = serializers.StringRelatedField(read_only=True)
+    sender_profile = serializers.SerializerMethodField(read_only=True)
     recipient = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(),
         required=False, allow_null=True
@@ -112,12 +113,33 @@ class MessageSerializer(serializers.ModelSerializer):
         queryset=Room.objects.all(),
         required=False, allow_null=True
     )
+    # allow_blank=True so file-only messages don't fail validation
+    content = serializers.CharField(required=False, allow_blank=True, default='')
     attachment = serializers.FileField(required=False, allow_null=True)
+
+    def get_sender_profile(self, obj):
+        request = self.context.get('request')
+        try:
+            profile = obj.sender.profile
+            image_url = None
+            if profile.image:
+                image_url = request.build_absolute_uri(profile.image.url) if request else profile.image.url
+            return {'image': image_url}
+        except Exception:
+            return {'image': None}
+
+    def validate(self, attrs):
+        # Must have either content or an attachment
+        if not attrs.get('content', '').strip() and not attrs.get('attachment'):
+            raise serializers.ValidationError(
+                {'content': 'Un message doit contenir du texte ou une pièce jointe.'}
+            )
+        return attrs
 
     class Meta:
         model = Message
-        fields = ["id", "sender", "recipient", "room", "content", "timestamp", "attachment", "is_read", "read_at"]
-        read_only_fields = ["id", "sender", "timestamp", "is_read", "read_at"]
+        fields = ["id", "sender", "sender_profile", "recipient", "room", "content", "timestamp", "attachment", "is_read", "read_at"]
+        read_only_fields = ["id", "sender", "sender_profile", "timestamp", "is_read", "read_at"]
 
         
              
