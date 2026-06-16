@@ -96,7 +96,11 @@ class ConversationSerializer(serializers.Serializer):
     lastMessage = serializers.CharField()
     timestamp = serializers.DateTimeField()
     isGroup = serializers.BooleanField()
-    userId = serializers.IntegerField(required=False)  # Ajoutez cette ligne
+    userId = serializers.IntegerField(required=False)
+    unreadCount = serializers.IntegerField(required=False, default=0)
+    lastMessageSeen = serializers.BooleanField(required=False, default=True)
+    lastMessageSenderId = serializers.IntegerField(required=False, allow_null=True)
+    lastMessageIsRead = serializers.BooleanField(required=False, default=True)
 
 class MessageSerializer(serializers.ModelSerializer):
     sender = serializers.StringRelatedField(read_only=True)

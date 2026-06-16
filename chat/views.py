@@ -380,12 +380,16 @@ class ConversationCreateView(APIView):
         )
 
         return Response({
-            'id': f"{user.id}{other_user.id}",
+            'id': int(f"{user.id}{other_user.id}"),
             'name': other_user.username,
             'lastMessage': message.content,
             'timestamp': message.timestamp,
             'isGroup': False,
             'userId': other_user.id,
+            'unreadCount': 0,
+            'lastMessageSeen': True,
+            'lastMessageSenderId': user.id,
+            'lastMessageIsRead': False,
             'user': user_serializer.data
         }, status=status.HTTP_201_CREATED)
 
@@ -435,6 +439,13 @@ class ConversationListView(APIView):
 
                 other_user.is_online = bool(int(redis_client.get(f'user:{other_user.id}:online') or 0))
                 user_serializer = UserSerializer(other_user, context={'request': request})
+                
+                unread_count = Message.objects.filter(sender=other_user, recipient=user, is_read=False).count()
+                
+                if last_message.sender == user:
+                    last_message_seen = True
+                else:
+                    last_message_seen = last_message.is_read
 
                 private_data.append({
                     'id': conversation_id,
@@ -443,6 +454,10 @@ class ConversationListView(APIView):
                     'timestamp': last_message.timestamp,
                     'isGroup': False,
                     'userId': other_user.id,
+                    'unreadCount': unread_count,
+                    'lastMessageSeen': last_message_seen,
+                    'lastMessageSenderId': last_message.sender_id if last_message else None,
+                    'lastMessageIsRead': last_message.is_read if last_message else True,
                     'user': user_serializer.data
                 })
 
@@ -536,22 +551,39 @@ class PrivateChatView(generics.ListCreateAPIView):
             
             # Notifier la sidebar des deux utilisateurs
             conversation_id = int(f"{a}{b}")
-            conversation_update = {
-                'conversation': {
-                    'id': conversation_id,
-                    'lastMessage': msg.content,
-                    'timestamp': msg.timestamp.isoformat(),
-                }
-            }
+            
+            # Pour l'expéditeur
             pusher_client.trigger(
                 f"user-{self.request.user.id}-conversations",
                 'new-message',
-                conversation_update
+                {
+                    'conversation': {
+                        'id': conversation_id,
+                        'lastMessage': msg.content,
+                        'timestamp': msg.timestamp.isoformat(),
+                        'incrementUnread': False,
+                        'lastMessageSeen': True,
+                        'lastMessageSenderId': self.request.user.id,
+                        'lastMessageIsRead': False,
+                    }
+                }
             )
+            
+            # Pour le destinataire
             pusher_client.trigger(
                 f"user-{other_id}-conversations",
                 'new-message',
-                conversation_update
+                {
+                    'conversation': {
+                        'id': conversation_id,
+                        'lastMessage': msg.content,
+                        'timestamp': msg.timestamp.isoformat(),
+                        'incrementUnread': True,
+                        'lastMessageSeen': False,
+                        'lastMessageSenderId': self.request.user.id,
+                        'lastMessageIsRead': False,
+                    }
+                }
             )
             
             # Mettre à jour last_seen pour l'expéditeur
@@ -583,12 +615,36 @@ class MarkMessagesReadView(APIView):
         if updated_count > 0:
             # Notifier le sender en temps réel que ses messages ont été lus
             a, b = sorted([request.user.id, user_id])
+            conversation_id = int(f"{a}{b}")
+            
             pusher_client.trigger(
                 f"private-chat-{a}-{b}",
                 'messages-read',
                 {
                     'reader_id': request.user.id,
                     'read_at': now.isoformat()
+                }
+            )
+            
+            # Notifier la sidebar de l'expéditeur (le destinataire de ce call) pour enlever le gras (lastMessageSeen=True)
+            pusher_client.trigger(
+                f"user-{user_id}-conversations",
+                'messages-read-sidebar',
+                {
+                    'conversation_id': conversation_id,
+                    'reset_unread': False,
+                    'lastMessageIsRead': True
+                }
+            )
+            
+            # Notifier la sidebar du lecteur pour remettre à zéro son compteur
+            pusher_client.trigger(
+                f"user-{request.user.id}-conversations",
+                'messages-read-sidebar',
+                {
+                    'conversation_id': conversation_id,
+                    'reset_unread': True,
+                    'lastMessageIsRead': True
                 }
             )
 
