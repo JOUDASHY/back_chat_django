@@ -39,7 +39,8 @@ from .models import Message, Room, Profile
 from .serializers import (
     MessageSerializer, RegisterSerializer, UserUpdateSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
-    ConversationSerializer, UserSerializer, CustomTokenObtainPairSerializer
+    ConversationSerializer, UserSerializer, CustomTokenObtainPairSerializer,
+    RoomSerializer, RoomDetailSerializer
 )
 from .pusher_client import pusher_client
 from .utils import update_online_status, redis_client, redis_available
@@ -476,24 +477,32 @@ class GroupChatView(generics.ListCreateAPIView):
             .select_related('sender__profile', 'recipient__profile')\
             .order_by("timestamp")
 
-    def perform_create(self, serializer):
+    def create(self, request, *args, **kwargs):
         room_id = self.kwargs["room_id"]
         room = get_object_or_404(Room, pk=room_id)
         if not room.participants.filter(id=self.request.user.id).exists():
             raise PermissionDenied("Vous n'êtes pas un participant de cette room.")
 
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
         try:
             msg = serializer.save(sender=self.request.user, room_id=room_id)
             # Sérialisation avec contexte
-            message_data = MessageSerializer(msg, context={'request': self.request}).data
+            message_data = MessageSerializer(msg, context={'request': request}).data
             pusher_client.trigger(f"group-chat-{room_id}", 'new-message', message_data)
             
             # Notifier la sidebar de tous les participants
             conversation_update = {
                 'conversation': {
                     'id': room.id,
+                    'name': room.name,
                     'lastMessage': msg.content,
                     'timestamp': msg.timestamp.isoformat(),
+                    'isGroup': True,
+                    'lastMessageSeen': False,
+                    'lastMessageSenderId': self.request.user.id,
+                    'lastMessageIsRead': False,
                 }
             }
             for participant in room.participants.all():
@@ -502,8 +511,119 @@ class GroupChatView(generics.ListCreateAPIView):
                     'new-message',
                     conversation_update
                 )
+                
+            return Response(message_data, status=status.HTTP_201_CREATED)
         except IntegrityError as e:
             raise e
+
+class RoomListCreateView(generics.ListCreateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.request.method == 'GET':
+            return RoomDetailSerializer
+        return RoomSerializer
+        
+    def get_queryset(self):
+        return Room.objects.filter(participants=self.request.user)
+
+    def perform_create(self, serializer):
+        room = serializer.save()
+        # Ajouter le créateur aux participants
+        room.participants.add(self.request.user)
+        # Ajouter les autres participants passés dans la requête
+        participant_ids = self.request.data.get('participants', [])
+        for pid in participant_ids:
+            try:
+                user = User.objects.get(id=pid)
+                room.participants.add(user)
+            except User.DoesNotExist:
+                pass
+                
+        # Créer un message système d'initialisation pour que le groupe apparaisse
+        msg = Message.objects.create(
+            sender=self.request.user,
+            room=room,
+            content=f"Groupe '{room.name}' créé."
+        )
+        
+        # Notifier tous les participants
+        conversation_data = {
+            'id': room.id,
+            'name': room.name,
+            'lastMessage': msg.content,
+            'timestamp': msg.timestamp.isoformat(),
+            'isGroup': True,
+            'unreadCount': 1,
+            'lastMessageSeen': False,
+            'lastMessageSenderId': self.request.user.id,
+            'lastMessageIsRead': False,
+        }
+        
+        for participant in room.participants.all():
+            pusher_client.trigger(
+                f"user-{participant.id}-conversations",
+                'new-conversation',
+                {'conversation': conversation_data}
+            )
+
+class RoomDetailUpdateView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.request.method in ['GET']:
+            return RoomDetailSerializer
+        return RoomSerializer
+        
+    def get_queryset(self):
+        return Room.objects.filter(participants=self.request.user)
+        
+    def perform_update(self, serializer):
+        room = serializer.save()
+        participant_ids = self.request.data.get('participants')
+        if participant_ids is not None:
+            # Remplacer les participants par la nouvelle liste
+            room.participants.clear()
+            for pid in participant_ids:
+                try:
+                    user = User.objects.get(id=pid)
+                    room.participants.add(user)
+                except User.DoesNotExist:
+                    pass
+            
+            # S'assurer que le créateur y reste au cas où (optionnel, mais recommandé)
+            if not room.participants.filter(id=self.request.user.id).exists():
+                room.participants.add(self.request.user)
+            
+            # Créer un message système pour informer du changement
+            msg = Message.objects.create(
+                sender=self.request.user,
+                room=room,
+                content=f"Les paramètres du groupe ont été mis à jour."
+            )
+            
+            message_data = MessageSerializer(msg, context={'request': self.request}).data
+            pusher_client.trigger(f"group-chat-{room.id}", 'new-message', message_data)
+            
+            # Notifier les conversations
+            conversation_update = {
+                'conversation': {
+                    'id': room.id,
+                    'name': room.name,
+                    'lastMessage': msg.content,
+                    'timestamp': msg.timestamp.isoformat(),
+                    'lastMessageSenderId': self.request.user.id,
+                    'isGroup': True,
+                    'lastMessageSeen': False,
+                    'lastMessageIsRead': False,
+                }
+            }
+            for participant in room.participants.all():
+                pusher_client.trigger(
+                    f"user-{participant.id}-conversations",
+                    'new-message',
+                    conversation_update
+                )
 
 class PrivateChatView(generics.ListCreateAPIView):
     serializer_class = MessageSerializer

@@ -16,6 +16,8 @@ from .views import (
     PublicUserProfileView,HandleDisconnectView,
     UpdateOnlineStatusView,
     MarkMessagesReadView,
+    RoomListCreateView,
+    RoomDetailUpdateView,
 )
 
 app_name = 'chat'
@@ -55,6 +57,7 @@ urlpatterns = [
      path('update-online-status/', UpdateOnlineStatusView.as_view(), name='update-online-status'),
     path('handle-disconnect/', HandleDisconnectView.as_view(), name='handle-disconnect'),  # Ajoutez cette ligne
 
-    # (Optionnel) Création et listing de rooms
-    # path('rooms/', RoomListCreateView.as_view(), name='rooms'),
+    # Création et listing de rooms
+    path('rooms/', RoomListCreateView.as_view(), name='rooms'),
+    path('rooms/<int:pk>/', RoomDetailUpdateView.as_view(), name='room-detail'),
 ]

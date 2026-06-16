@@ -123,8 +123,15 @@ class MessageSerializer(serializers.ModelSerializer):
              
 class RoomSerializer(serializers.ModelSerializer):
     participants = serializers.PrimaryKeyRelatedField(
-        many=True, queryset=User.objects.all()
+        many=True, queryset=User.objects.all(), required=False
     )
+
+    class Meta:
+        model = Room
+        fields = ["id", "name", "participants"]
+
+class RoomDetailSerializer(serializers.ModelSerializer):
+    participants = UserSerializer(many=True, read_only=True)
 
     class Meta:
         model = Room
@@ -272,15 +279,5 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         for attr, value in profile_data.items():
             setattr(profile, attr, value)
         profile.save()
-
-        # Add the recipient's profile image to the response
-        profile_image = None
-        if hasattr(other_user, 'profile') and other_user.profile.image:
-            profile_image = request.build_absolute_uri(other_user.profile.image.url)
-
-        response.data = {
-            'messages': response.data,
-            'recipient_profile_image': profile_image
-        }
 
         return instance
