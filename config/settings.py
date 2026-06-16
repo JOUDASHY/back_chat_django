@@ -133,9 +133,35 @@ SIMPLE_JWT = {
 
 # CORS settings
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = False  # Important: gardez ceci à False
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
-CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
+CORS_ALLOW_ALL_ORIGINS = False
+
+def _split_env_list(key: str) -> list[str]:
+    return [v.strip() for v in os.getenv(key, '').split(',') if v.strip()]
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        normalized = item.rstrip('/')
+        if normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
+    return result
+
+
+BACKEND_URL = os.getenv('BACKEND_URL')
+FRONTEND_URL = os.getenv('FRONTEND_URL')
+
+CORS_ALLOWED_ORIGINS = _dedupe(
+    _split_env_list('CORS_ALLOWED_ORIGINS')
+    + ([FRONTEND_URL] if FRONTEND_URL else [])
+    + ([BACKEND_URL] if BACKEND_URL else [])
+)
+
+CSRF_TRUSTED_ORIGINS = _dedupe(
+    _split_env_list('CSRF_TRUSTED_ORIGINS') + CORS_ALLOWED_ORIGINS
+)
 
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -158,10 +184,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Security settings
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = False  # Permettre l'accès JS au cookie CSRF
-CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -201,35 +224,10 @@ STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'  #
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS settings
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
-CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
-CORS_ORIGIN_ALLOW_ALL = os.getenv('CORS_ALLOW_ALL', 'False').lower() == 'true'
-
-# Security settings
-SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True') == 'True'
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'True') == 'True'
-CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'True') == 'True'
-
-BACKEND_URL = os.getenv('BACKEND_URL')
-FRONTEND_URL = os.getenv('FRONTEND_URL')
-
-CORS_ALLOWED_ORIGINS = [FRONTEND_URL]
-if BACKEND_URL:
-    CORS_ALLOWED_ORIGINS.append(BACKEND_URL)
-
-CSRF_TRUSTED_ORIGINS = [FRONTEND_URL]
-if BACKEND_URL:
-    CSRF_TRUSTED_ORIGINS.append(BACKEND_URL)
-
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
-
 # Get host from URL
 def get_hosts_from_urls():
     hosts = set()
-    for url in [os.getenv('FRONTEND_URL', ''), os.getenv('BACKEND_URL', '')]:
+    for url in [FRONTEND_URL or '', BACKEND_URL or '']:
         if url:
             from urllib.parse import urlparse
             parsed = urlparse(url)
@@ -238,22 +236,8 @@ def get_hosts_from_urls():
     return list(hosts)
 
 # Combine explicit ALLOWED_HOSTS with hosts from URLs
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') + get_hosts_from_urls()
-ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS if host.strip()]
-
-# CORS settings
-CORS_ALLOWED_ORIGINS = []
-if os.getenv('FRONTEND_URL'):
-    CORS_ALLOWED_ORIGINS.append(os.getenv('FRONTEND_URL'))
-if os.getenv('BACKEND_URL'):
-    CORS_ALLOWED_ORIGINS.append(os.getenv('BACKEND_URL'))
-
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
-
-# Security settings based on environment
-SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False').lower() == 'true'
-CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False').lower() == 'true'
-SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
+ALLOWED_HOSTS = _split_env_list('ALLOWED_HOSTS') + get_hosts_from_urls()
+ALLOWED_HOSTS = _dedupe(ALLOWED_HOSTS)
 
 # Django REST Framework and JWT configuration
 REST_FRAMEWORK = {
