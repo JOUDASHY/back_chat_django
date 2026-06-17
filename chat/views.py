@@ -846,16 +846,50 @@ class TypingView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        is_typing  = request.data.get('isTyping', False)
-        channel    = request.data.get('channel', '')   # ex: "private-chat-1-2" ou "group-chat-5"
+        is_typing = request.data.get('isTyping', False)
+        channel = request.data.get('channel', '')
         if not channel:
             return Response({'detail': 'channel requis'}, status=status.HTTP_400_BAD_REQUEST)
 
-        pusher_client.trigger(channel, 'typing', {
-            'userId':    request.user.id,
-            'username':  request.user.username,
-            'isTyping':  is_typing,
-        })
+        user = request.user
+        typing_payload = {
+            'userId': user.id,
+            'username': user.username,
+            'isTyping': is_typing,
+        }
+        pusher_client.trigger(channel, 'typing', typing_payload)
+
+        sidebar_payload = {
+            **typing_payload,
+            'display_name': get_user_display_name(user),
+        }
+
+        if channel.startswith('private-chat-'):
+            try:
+                a, b = [int(x) for x in channel.replace('private-chat-', '').split('-')]
+            except (TypeError, ValueError):
+                return Response({'ok': True})
+
+            other_id = b if user.id == a else a
+            sidebar_payload['conversation_id'] = int(f'{a}{b}')
+            pusher_client.trigger(f'user-{other_id}-conversations', 'typing', sidebar_payload)
+
+        elif channel.startswith('group-chat-'):
+            try:
+                room_id = int(channel.replace('group-chat-', ''))
+            except (TypeError, ValueError):
+                return Response({'ok': True})
+
+            sidebar_payload['conversation_id'] = room_id
+            room = Room.objects.filter(pk=room_id).prefetch_related('participants').first()
+            if room:
+                for member in room.participants.exclude(pk=user.id):
+                    pusher_client.trigger(
+                        f'user-{member.id}-conversations',
+                        'typing',
+                        sidebar_payload,
+                    )
+
         return Response({'ok': True})
 
 
