@@ -21,6 +21,7 @@ from .views import (
     MessageDetailView,
     TypingView,
 )
+from .call_views import CallStartView, CallRespondView, CallEndView
 
 app_name = 'chat'
 
@@ -64,4 +65,9 @@ urlpatterns = [
     path('rooms/', RoomListCreateView.as_view(), name='rooms'),
     path('rooms/<int:pk>/', RoomDetailUpdateView.as_view(), name='room-detail'),
     path('typing/', TypingView.as_view(), name='typing'),
+
+    # Appels audio / vidéo (LiveKit)
+    path('calls/start/', CallStartView.as_view(), name='call-start'),
+    path('calls/respond/', CallRespondView.as_view(), name='call-respond'),
+    path('calls/end/', CallEndView.as_view(), name='call-end'),
 ]

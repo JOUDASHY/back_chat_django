@@ -20,6 +20,11 @@ PUSHER_SECRET  = os.getenv('PUSHER_SECRET')
 PUSHER_CLUSTER = os.getenv('PUSHER_CLUSTER')
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 
+# LiveKit (appels audio/vidéo self-hosted)
+LIVEKIT_URL = os.getenv('LIVEKIT_URL', '')
+LIVEKIT_API_KEY = os.getenv('LIVEKIT_API_KEY', '')
+LIVEKIT_API_SECRET = os.getenv('LIVEKIT_API_SECRET', '')
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-^f*&ik!m%v7mf=p%xr#%lrfsrg82ek##153*8d7=p70)n8&n5x')
 
@@ -76,8 +81,9 @@ LOGGING = {
 }
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # MUST BE FIRST
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    # 'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     # Default Django middleware
     'django.contrib.sessions.middleware.SessionMiddleware',
