@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.utils import timezone
 
 from .models import CallLog, Message
@@ -128,6 +130,25 @@ def reject_call_log(*, room_name: str, ended_by) -> CallLog | None:
     log.message = msg
     log.save(update_fields=['message'])
     return log
+
+
+def close_stale_ringing_calls(*, max_age_seconds: int = 45) -> list[CallLog]:
+    """Clôture les appels jamais décrochés, restés en sonnerie."""
+    cutoff = timezone.now() - timedelta(seconds=max_age_seconds)
+    logs = list(
+        CallLog.objects.filter(
+            status='ringing',
+            started_at__lt=cutoff,
+            message__isnull=True,
+            answered_at__isnull=True,
+        ).select_related('caller', 'recipient')
+    )
+    finalized = []
+    for log in logs:
+        result = finalize_call_log(room_name=log.room_name, ended_by=log.caller)
+        if result:
+            finalized.append(result)
+    return finalized
 
 
 def broadcast_call_message(log: CallLog, request) -> None:

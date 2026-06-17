@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from .call_service import (
     accept_call_log,
     broadcast_call_message,
+    close_stale_ringing_calls,
     finalize_call_log,
     format_call_preview,
     reject_call_log,
@@ -194,6 +195,10 @@ class CallHistoryView(APIView):
 
     def get(self, request):
         user = request.user
+
+        for log in close_stale_ringing_calls():
+            broadcast_call_message(log, request)
+
         logs = (
             CallLog.objects.filter(Q(caller=user) | Q(recipient=user))
             .exclude(status='ringing')
