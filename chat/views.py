@@ -43,7 +43,7 @@ from .serializers import (
     RoomSerializer, RoomDetailSerializer
 )
 from .pusher_client import pusher_client
-from .utils import update_online_status, redis_client, redis_available
+from .utils import update_online_status, redis_client, redis_available, get_user_display_name, resolve_user_by_login_identifier
 
 # Configure logger and environment
 logger = logging.getLogger(__name__)
@@ -272,7 +272,9 @@ class LoginView(TokenObtainPairView):
 
         # Mettre à jour le statut et last_seen lors de la connexion
         if response.status_code == 200:
-            user = User.objects.get(username=request.data.get('username'))
+            user = resolve_user_by_login_identifier(request.data.get('username'))
+            if not user:
+                return response
             profile = user.profile
             profile.status = 'online'
             profile.save()
@@ -378,7 +380,7 @@ class ConversationCreateView(APIView):
             ).count()
             return Response({
                 'id': conversation_id,
-                'name': other_user.username,
+                'name': get_user_display_name(other_user),
                 'lastMessage': last_message.content,
                 'timestamp': last_message.timestamp,
                 'isGroup': False,
@@ -399,7 +401,7 @@ class ConversationCreateView(APIView):
 
         return Response({
             'id': conversation_id,
-            'name': other_user.username,
+            'name': get_user_display_name(other_user),
             'lastMessage': message.content,
             'timestamp': message.timestamp,
             'isGroup': False,
@@ -490,7 +492,7 @@ class ConversationListView(APIView):
 
                 private_data.append({
                     'id': conversation_id,
-                    'name': other_user.username,
+                    'name': get_user_display_name(other_user),
                     'lastMessage': last_message.content,
                     'timestamp': last_message.timestamp,
                     'isGroup': False,
@@ -698,6 +700,22 @@ class PrivateChatView(generics.ListCreateAPIView):
         
         return response
 
+    def _private_sidebar_conversation(self, conversation_id, msg, peer_user, *, increment_unread, last_message_seen):
+        """Payload complet pour la sidebar (nom, avatar, userId)."""
+        return {
+            'id': conversation_id,
+            'name': get_user_display_name(peer_user),
+            'lastMessage': msg.content,
+            'timestamp': msg.timestamp.isoformat(),
+            'isGroup': False,
+            'userId': peer_user.id,
+            'user': UserSerializer(peer_user, context={'request': self.request}).data,
+            'incrementUnread': increment_unread,
+            'lastMessageSeen': last_message_seen,
+            'lastMessageSenderId': self.request.user.id,
+            'lastMessageIsRead': False,
+        }
+
     def perform_create(self, serializer):
         other_id = self.kwargs["user_id"]
         other_user = get_object_or_404(User, pk=other_id)
@@ -712,37 +730,33 @@ class PrivateChatView(generics.ListCreateAPIView):
             # Notifier la sidebar des deux utilisateurs
             conversation_id = int(f"{a}{b}")
             
-            # Pour l'expéditeur
+            # Pour l'expéditeur (peer = destinataire)
             pusher_client.trigger(
                 f"user-{self.request.user.id}-conversations",
                 'new-message',
                 {
-                    'conversation': {
-                        'id': conversation_id,
-                        'lastMessage': msg.content,
-                        'timestamp': msg.timestamp.isoformat(),
-                        'incrementUnread': False,
-                        'lastMessageSeen': True,
-                        'lastMessageSenderId': self.request.user.id,
-                        'lastMessageIsRead': False,
-                    }
+                    'conversation': self._private_sidebar_conversation(
+                        conversation_id,
+                        msg,
+                        other_user,
+                        increment_unread=False,
+                        last_message_seen=True,
+                    )
                 }
             )
             
-            # Pour le destinataire
+            # Pour le destinataire (peer = expéditeur)
             pusher_client.trigger(
                 f"user-{other_id}-conversations",
                 'new-message',
                 {
-                    'conversation': {
-                        'id': conversation_id,
-                        'lastMessage': msg.content,
-                        'timestamp': msg.timestamp.isoformat(),
-                        'incrementUnread': True,
-                        'lastMessageSeen': False,
-                        'lastMessageSenderId': self.request.user.id,
-                        'lastMessageIsRead': False,
-                    }
+                    'conversation': self._private_sidebar_conversation(
+                        conversation_id,
+                        msg,
+                        self.request.user,
+                        increment_unread=True,
+                        last_message_seen=False,
+                    )
                 }
             )
             
@@ -758,6 +772,72 @@ class PrivateChatView(generics.ListCreateAPIView):
         except Exception as e:
             print(f"Unexpected error: {e}")
             raise e
+
+
+class MessageDetailView(APIView):
+    """Modifier ou supprimer un message (auteur uniquement)."""
+    permission_classes = [IsAuthenticated]
+
+    def _trigger_message_event(self, event: str, payload, msg: Message):
+        if msg.room_id:
+            pusher_client.trigger(f"group-chat-{msg.room_id}", event, payload)
+        elif msg.recipient_id:
+            a, b = sorted([msg.sender_id, msg.recipient_id])
+            pusher_client.trigger(f"private-chat-{a}-{b}", event, payload)
+
+    def patch(self, request, pk):
+        msg = get_object_or_404(Message, pk=pk)
+
+        if msg.sender_id != request.user.id:
+            raise PermissionDenied("Vous ne pouvez modifier que vos propres messages.")
+
+        if msg.attachment:
+            return Response(
+                {"error": "Impossible de modifier un message avec pièce jointe."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        content = request.data.get('content', '').strip()
+        if not content:
+            return Response(
+                {"error": "Le message ne peut pas être vide."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        msg.content = content
+        msg.save(update_fields=['content'])
+
+        message_data = MessageSerializer(msg, context={'request': request}).data
+        self._trigger_message_event('message-updated', message_data, msg)
+        return Response(message_data)
+
+    def delete(self, request, pk):
+        msg = get_object_or_404(Message, pk=pk)
+
+        if msg.sender_id != request.user.id:
+            raise PermissionDenied("Vous ne pouvez supprimer que vos propres messages.")
+
+        message_id = msg.id
+        room_id = msg.room_id
+        recipient_id = msg.recipient_id
+        sender_id = msg.sender_id
+
+        if msg.attachment:
+            try:
+                msg.attachment.delete(save=False)
+            except Exception as e:
+                logger.warning("Failed to delete attachment for message %s: %s", pk, e)
+
+        msg.delete()
+
+        payload = {'id': message_id}
+        if room_id:
+            pusher_client.trigger(f"group-chat-{room_id}", 'message-deleted', payload)
+        elif recipient_id:
+            a, b = sorted([sender_id, recipient_id])
+            pusher_client.trigger(f"private-chat-{a}-{b}", 'message-deleted', payload)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class TypingView(APIView):

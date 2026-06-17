@@ -10,6 +10,11 @@ from django.contrib.auth.models import User
 from .models import Profile
 # serializers.py
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.contrib.auth.models import User
+from django.db.models import Q
+from rest_framework.exceptions import AuthenticationFailed
+
+from .utils import get_user_display_name, generate_unique_username, resolve_user_by_login_identifier
 
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
@@ -23,13 +28,28 @@ from django.conf import settings
 # serializers.py
 # serializers.py
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Connexion par email ou identifiant (@username)."""
+
     def validate(self, attrs):
-        data = super().validate(attrs)
-        
-        # Passe le contexte de la requête au UserSerializer
+        identifier = (attrs.get('username') or '').strip()
+        password = attrs.get('password')
+
+        user = resolve_user_by_login_identifier(identifier)
+
+        if not user or not user.check_password(password):
+            raise AuthenticationFailed(
+                'Identifiants incorrects. Utilisez votre email ou votre identifiant.'
+            )
+
+        self.user = user
+        refresh = self.get_token(user)
+        data = {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        }
         user_serializer = UserSerializer(
-            instance=self.user,
-            context={'request': self.context.get('request')}  # 🚨 Nécessaire pour l'URL
+            instance=user,
+            context={'request': self.context.get('request')}
         )
         data['user'] = user_serializer.data
         return data
@@ -77,13 +97,17 @@ from .models import Room
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(read_only=True)
     is_online = serializers.BooleanField(read_only=True)
+    display_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = (
             'id', 'username', 'email', 'first_name', 'last_name',
-            'profile', 'is_online'
+            'display_name', 'profile', 'is_online'
         )
+
+    def get_display_name(self, obj):
+        return get_user_display_name(obj)
 
 from rest_framework import serializers
 
@@ -160,35 +184,46 @@ class RoomDetailSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "participants"]
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
-    gender = serializers.CharField(write_only=True, required=False)  # Champ pour le sexe
+    password = serializers.CharField(write_only=True, min_length=8)
+    gender = serializers.CharField(write_only=True, required=False)
+    username = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = User
         fields = ('username', 'email', 'password', 'gender', 'first_name', 'last_name')
         extra_kwargs = {
-            'first_name': {'required': False},
-            'last_name': {'required': False}
+            'first_name': {'required': True},
+            'last_name': {'required': True},
+            'email': {'required': True},
         }
 
+    def validate_email(self, value):
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError('Cet email est déjà utilisé.')
+        return value
+
     def create(self, validated_data):
-        # Extraire gender avant de créer l'utilisateur
         gender = validated_data.pop('gender', None)
-        
+        validated_data.pop('username', None)
+        email = validated_data['email']
+        first_name = validated_data['first_name'].strip()
+        last_name = validated_data['last_name'].strip()
+
+        username = generate_unique_username(email.split('@')[0])
+
         user = User.objects.create_user(
-            username=validated_data['username'],
-            email=validated_data.get('email', ''),
+            username=username,
+            email=email,
             password=validated_data['password'],
-            first_name=validated_data.get('first_name', ''),
-            last_name=validated_data.get('last_name', '')
+            first_name=first_name,
+            last_name=last_name,
         )
-        
-        # Mettre à jour le profil avec le sexe si fourni
+
         if gender:
             profile = user.profile
             profile.gender = gender
             profile.save()
-            
+
         return user
         
 class PasswordResetRequestSerializer(serializers.Serializer):

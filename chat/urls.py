@@ -18,6 +18,7 @@ from .views import (
     MarkMessagesReadView,
     RoomListCreateView,
     RoomDetailUpdateView,
+    MessageDetailView,
     TypingView,
 )
 
@@ -29,6 +30,7 @@ urlpatterns = [
 
     # Tous les messages (non filtrés)
     path('messages/', MessageListCreateView.as_view(), name='messages'),
+    path('messages/<int:pk>/', MessageDetailView.as_view(), name='message-detail'),
     path('users/', UserListView.as_view(), name='user-list'),
 
     # Chat privé avec un autre utilisateur
