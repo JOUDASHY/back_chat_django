@@ -28,7 +28,7 @@ from .pusher_client import pusher_client
 from .utils import get_user_display_name
 
 
-def _caller_payload(user, request):
+def _user_call_payload(user, request):
     image = None
     try:
         if user.profile.image:
@@ -85,7 +85,7 @@ class CallStartView(APIView):
         )
 
         caller_token = create_livekit_token(room_name=room_name, user=request.user)
-        caller_info = _caller_payload(request.user, request)
+        caller_info = _user_call_payload(request.user, request)
 
         _notify_user(
             recipient_id,
@@ -103,10 +103,7 @@ class CallStartView(APIView):
             'call_type': call_type,
             'token': caller_token,
             'livekit_url': cfg['url'],
-            'recipient': {
-                'id': recipient.id,
-                'display_name': get_user_display_name(recipient),
-            },
+            'recipient': _user_call_payload(recipient, request),
         })
 
 
@@ -146,7 +143,7 @@ class CallRespondView(APIView):
             'call-accepted',
             {
                 'room_name': room_name,
-                'user': _caller_payload(request.user, request),
+                'user': _user_call_payload(request.user, request),
             },
         )
 
