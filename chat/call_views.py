@@ -1,18 +1,28 @@
 import uuid
 
 from django.contrib.auth.models import User
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .call_service import (
+    accept_call_log,
+    broadcast_call_message,
+    finalize_call_log,
+    format_call_preview,
+    reject_call_log,
+    start_call_log,
+)
 from .livekit_utils import (
     build_call_room_name,
     create_livekit_token,
     get_livekit_config,
     livekit_is_configured,
 )
+from .models import CallLog
 from .pusher_client import pusher_client
 from .utils import get_user_display_name
 
@@ -66,6 +76,13 @@ class CallStartView(APIView):
         room_name = build_call_room_name(request.user.id, recipient_id, suffix)
         cfg = get_livekit_config()
 
+        start_call_log(
+            room_name=room_name,
+            caller=request.user,
+            recipient=recipient,
+            call_type=call_type,
+        )
+
         caller_token = create_livekit_token(room_name=room_name, user=request.user)
         caller_info = _caller_payload(request.user, request)
 
@@ -113,9 +130,13 @@ class CallRespondView(APIView):
             return Response({'error': 'caller_id invalide.'}, status=400)
 
         if action == 'reject':
+            log = reject_call_log(room_name=room_name, ended_by=request.user)
+            if log:
+                broadcast_call_message(log, request)
             _notify_user(caller_id, 'call-rejected', {'room_name': room_name})
             return Response({'status': 'rejected'})
 
+        accept_call_log(room_name)
         cfg = get_livekit_config()
         token = create_livekit_token(room_name=room_name, user=request.user)
 
@@ -151,6 +172,10 @@ class CallEndView(APIView):
         except (TypeError, ValueError):
             return Response({'error': 'peer_id invalide.'}, status=400)
 
+        log = finalize_call_log(room_name=room_name, ended_by=request.user)
+        if log:
+            broadcast_call_message(log, request)
+
         _notify_user(
             peer_id,
             'call-ended',
@@ -161,3 +186,51 @@ class CallEndView(APIView):
         )
 
         return Response({'status': 'ended'})
+
+
+class CallHistoryView(APIView):
+    """Historique des appels de l'utilisateur connecté."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        logs = (
+            CallLog.objects.filter(Q(caller=user) | Q(recipient=user))
+            .exclude(status='ringing')
+            .select_related('caller', 'recipient', 'caller__profile', 'recipient__profile')
+            .order_by('-started_at')[:80]
+        )
+
+        data = []
+        for log in logs:
+            peer = log.recipient if log.caller_id == user.id else log.caller
+            direction = 'outgoing' if log.caller_id == user.id else 'incoming'
+            call_event = {
+                'type': log.call_type,
+                'status': log.status,
+                'duration_seconds': log.duration_seconds,
+                'initiator_id': log.caller_id,
+            }
+            data.append({
+                'id': log.id,
+                'room_name': log.room_name,
+                'call_type': log.call_type,
+                'status': log.status,
+                'direction': direction,
+                'duration_seconds': log.duration_seconds,
+                'started_at': log.started_at,
+                'ended_at': log.ended_at,
+                'preview': format_call_preview(call_event),
+                'peer': {
+                    'id': peer.id,
+                    'display_name': get_user_display_name(peer),
+                    'username': peer.username,
+                    'image': (
+                        request.build_absolute_uri(peer.profile.image.url)
+                        if getattr(peer, 'profile', None) and peer.profile.image
+                        else None
+                    ),
+                },
+            })
+
+        return Response(data)

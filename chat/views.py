@@ -43,6 +43,7 @@ from .serializers import (
     RoomSerializer, RoomDetailSerializer
 )
 from .pusher_client import pusher_client
+from .call_service import message_preview
 from .utils import update_online_status, redis_client, redis_available, get_user_display_name, resolve_user_by_login_identifier
 
 # Configure logger and environment
@@ -381,7 +382,7 @@ class ConversationCreateView(APIView):
             return Response({
                 'id': conversation_id,
                 'name': get_user_display_name(other_user),
-                'lastMessage': last_message.content,
+                'lastMessage': message_preview(last_message),
                 'timestamp': last_message.timestamp,
                 'isGroup': False,
                 'userId': other_user.id,
@@ -493,7 +494,7 @@ class ConversationListView(APIView):
                 private_data.append({
                     'id': conversation_id,
                     'name': get_user_display_name(other_user),
-                    'lastMessage': last_message.content,
+                    'lastMessage': message_preview(last_message),
                     'timestamp': last_message.timestamp,
                     'isGroup': False,
                     'userId': other_user.id,
@@ -539,7 +540,7 @@ class GroupChatView(generics.ListCreateAPIView):
                 'conversation': {
                     'id': room.id,
                     'name': room.name,
-                    'lastMessage': msg.content,
+                    'lastMessage': message_preview(msg),
                     'timestamp': msg.timestamp.isoformat(),
                     'isGroup': True,
                     'lastMessageSeen': False,
@@ -593,7 +594,7 @@ class RoomListCreateView(generics.ListCreateAPIView):
         conversation_data = {
             'id': room.id,
             'name': room.name,
-            'lastMessage': msg.content,
+            'lastMessage': message_preview(msg),
             'timestamp': msg.timestamp.isoformat(),
             'isGroup': True,
             'unreadCount': 1,
@@ -652,7 +653,7 @@ class RoomDetailUpdateView(generics.RetrieveUpdateDestroyAPIView):
                 'conversation': {
                     'id': room.id,
                     'name': room.name,
-                    'lastMessage': msg.content,
+                    'lastMessage': message_preview(msg),
                     'timestamp': msg.timestamp.isoformat(),
                     'lastMessageSenderId': self.request.user.id,
                     'isGroup': True,
@@ -705,7 +706,7 @@ class PrivateChatView(generics.ListCreateAPIView):
         return {
             'id': conversation_id,
             'name': get_user_display_name(peer_user),
-            'lastMessage': msg.content,
+            'lastMessage': message_preview(msg),
             'timestamp': msg.timestamp.isoformat(),
             'isGroup': False,
             'userId': peer_user.id,

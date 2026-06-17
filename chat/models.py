@@ -102,6 +102,7 @@ class Message(models.Model):
     attachment = models.FileField(upload_to='message_attachments/', null=True, blank=True)
     is_read = models.BooleanField(default=False)
     read_at = models.DateTimeField(null=True, blank=True)
+    call_event = models.JSONField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -111,3 +112,36 @@ class Message(models.Model):
         if self.recipient:
             return f"[PM] {self.sender.username} → {self.recipient.username}: {self.content[:20]}{attachment_info}"
         return f"{self.sender.username}: {self.content[:20]}{attachment_info}"
+
+
+class CallLog(models.Model):
+    CALL_TYPE_CHOICES = [('audio', 'Audio'), ('video', 'Vidéo')]
+    STATUS_CHOICES = [
+        ('ringing', 'Sonnerie'),
+        ('completed', 'Terminé'),
+        ('missed', 'Manqué'),
+        ('rejected', 'Refusé'),
+        ('cancelled', 'Annulé'),
+    ]
+
+    room_name = models.CharField(max_length=120, unique=True)
+    caller = models.ForeignKey(User, on_delete=models.CASCADE, related_name='calls_made')
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='calls_received')
+    call_type = models.CharField(max_length=10, choices=CALL_TYPE_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ringing')
+    started_at = models.DateTimeField(auto_now_add=True)
+    answered_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    duration_seconds = models.PositiveIntegerField(default=0)
+    ended_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='calls_ended'
+    )
+    message = models.OneToOneField(
+        'Message', null=True, blank=True, on_delete=models.SET_NULL, related_name='call_log'
+    )
+
+    class Meta:
+        ordering = ['-started_at']
+
+    def __str__(self):
+        return f"{self.call_type} {self.status} {self.caller_id}→{self.recipient_id}"

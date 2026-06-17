@@ -21,7 +21,7 @@ from .views import (
     MessageDetailView,
     TypingView,
 )
-from .call_views import CallStartView, CallRespondView, CallEndView
+from .call_views import CallStartView, CallRespondView, CallEndView, CallHistoryView
 
 app_name = 'chat'
 
@@ -70,4 +70,5 @@ urlpatterns = [
     path('calls/start/', CallStartView.as_view(), name='call-start'),
     path('calls/respond/', CallRespondView.as_view(), name='call-respond'),
     path('calls/end/', CallEndView.as_view(), name='call-end'),
+    path('calls/history/', CallHistoryView.as_view(), name='call-history'),
 ]

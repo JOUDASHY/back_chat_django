@@ -153,7 +153,8 @@ class MessageSerializer(serializers.ModelSerializer):
             return {'image': None}
 
     def validate(self, attrs):
-        # Must have either content or an attachment
+        if attrs.get('call_event'):
+            return attrs
         if not attrs.get('content', '').strip() and not attrs.get('attachment'):
             raise serializers.ValidationError(
                 {'content': 'Un message doit contenir du texte ou une pièce jointe.'}
@@ -162,7 +163,10 @@ class MessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Message
-        fields = ["id", "sender", "sender_profile", "recipient", "room", "content", "timestamp", "attachment", "is_read", "read_at"]
+        fields = [
+            "id", "sender", "sender_profile", "recipient", "room", "content",
+            "timestamp", "attachment", "is_read", "read_at", "call_event",
+        ]
         read_only_fields = ["id", "sender", "sender_profile", "timestamp", "is_read", "read_at"]
 
         
