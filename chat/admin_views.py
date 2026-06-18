@@ -122,3 +122,30 @@ class AdminUnsuspendUserView(APIView):
             'detail': 'Compte réactivé.',
             'user': AdminUserSerializer(target, context={'request': request}).data,
         })
+
+
+class AdminDeleteUserView(APIView):
+    permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def delete(self, request, pk):
+        if request.user.id == pk:
+            return Response(
+                {'error': 'Vous ne pouvez pas supprimer votre propre compte.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target = get_object_or_404(User.objects.select_related('profile'), pk=pk)
+
+        if target.is_superuser and not request.user.is_superuser:
+            return Response(
+                {'error': 'Seul un super-admin peut supprimer ce compte.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Notify the deleted user before removal
+        _force_offline(target)
+        pusher_client.trigger(f'user-{target.id}-conversations', 'account-deleted', {})
+
+        target.delete()
+
+        return Response({'detail': 'Compte supprimé avec succès.'}, status=status.HTTP_200_OK)
