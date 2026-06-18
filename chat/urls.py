@@ -21,6 +21,10 @@ from .views import (
     RoomDetailUpdateView,
     MessageDetailView,
     TypingView,
+    BlockUserView,
+    UnblockUserView,
+    BlockStatusView,
+    BlockedUsersListView,
 )
 from .call_views import CallStartView, CallRespondView, CallEndView, CallHistoryView
 
@@ -73,4 +77,10 @@ urlpatterns = [
     path('calls/respond/', CallRespondView.as_view(), name='call-respond'),
     path('calls/end/', CallEndView.as_view(), name='call-end'),
     path('calls/history/', CallHistoryView.as_view(), name='call-history'),
+
+    # Blocage utilisateur
+    path('users/<int:user_id>/block/', BlockUserView.as_view(), name='block-user'),
+    path('users/<int:user_id>/unblock/', UnblockUserView.as_view(), name='unblock-user'),
+    path('users/<int:user_id>/block-status/', BlockStatusView.as_view(), name='block-status'),
+    path('users/blocked/', BlockedUsersListView.as_view(), name='blocked-users'),
 ]

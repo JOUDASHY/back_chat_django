@@ -35,7 +35,7 @@ from oauthlib.oauth2 import OAuth2Error
 from requests.exceptions import RequestException
 
 # Local imports
-from .models import Message, Room, Profile
+from .models import Message, Room, Profile, Block
 from .serializers import (
     MessageSerializer, RegisterSerializer, UserUpdateSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
@@ -729,6 +729,13 @@ class PrivateChatView(generics.ListCreateAPIView):
         other_id = self.kwargs["user_id"]
         other_user = get_object_or_404(User, pk=other_id)
 
+        # Vérifier si un blocage existe dans un sens ou l'autre
+        if Block.objects.filter(
+            Q(blocker=self.request.user, blocked=other_user) |
+            Q(blocker=other_user, blocked=self.request.user)
+        ).exists():
+            raise PermissionDenied("Impossible d'envoyer un message : blocage actif entre ces utilisateurs.")
+
         try:
             msg = serializer.save(sender=self.request.user, recipient_id=other_id)
             # Sérialisation avec contexte
@@ -1056,3 +1063,56 @@ class UserPreferencesView(APIView):
     
     def get(self, request):
         user = request.user
+
+class BlockUserView(APIView):
+    """Bloquer un utilisateur."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id):
+        if request.user.id == user_id:
+            return Response(
+                {'error': 'Vous ne pouvez pas vous bloquer vous-même.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        target = get_object_or_404(User, pk=user_id)
+        block, created = Block.objects.get_or_create(blocker=request.user, blocked=target)
+        if created:
+            return Response({'detail': f'{target.username} a été bloqué.'}, status=status.HTTP_201_CREATED)
+        return Response({'detail': 'Utilisateur déjà bloqué.'}, status=status.HTTP_200_OK)
+
+
+class UnblockUserView(APIView):
+    """Débloquer un utilisateur."""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, user_id):
+        target = get_object_or_404(User, pk=user_id)
+        deleted, _ = Block.objects.filter(blocker=request.user, blocked=target).delete()
+        if deleted:
+            return Response({'detail': f'{target.username} a été débloqué.'}, status=status.HTTP_200_OK)
+        return Response({'detail': 'Cet utilisateur n\'était pas bloqué.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class BlockStatusView(APIView):
+    """Statut de blocage entre l'utilisateur connecté et un autre."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        target = get_object_or_404(User, pk=user_id)
+        i_blocked = Block.objects.filter(blocker=request.user, blocked=target).exists()
+        they_blocked = Block.objects.filter(blocker=target, blocked=request.user).exists()
+        return Response({
+            'i_blocked_them': i_blocked,
+            'they_blocked_me': they_blocked,
+            'is_blocked': i_blocked or they_blocked,
+        })
+
+
+class BlockedUsersListView(generics.ListAPIView):
+    """Liste des utilisateurs bloqués par l'utilisateur connecté."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserSerializer
+
+    def get_queryset(self):
+        blocked_ids = Block.objects.filter(blocker=self.request.user).values_list('blocked_id', flat=True)
+        return User.objects.filter(id__in=blocked_ids).select_related('profile')

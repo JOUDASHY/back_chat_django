@@ -145,3 +145,17 @@ class CallLog(models.Model):
 
     def __str__(self):
         return f"{self.call_type} {self.status} {self.caller_id}→{self.recipient_id}"
+
+
+class Block(models.Model):
+    """User1 bloque User2 — relation directionnelle."""
+    blocker = models.ForeignKey(User, on_delete=models.CASCADE, related_name='blocking')
+    blocked = models.ForeignKey(User, on_delete=models.CASCADE, related_name='blocked_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('blocker', 'blocked')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.blocker.username} bloque {self.blocked.username}"
