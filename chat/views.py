@@ -39,7 +39,7 @@ from .models import Message, Room, Profile
 from .serializers import (
     MessageSerializer, RegisterSerializer, UserUpdateSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
-    ConversationSerializer, UserSerializer, CustomTokenObtainPairSerializer,
+    ConversationSerializer, UserSerializer, CurrentUserSerializer, CustomTokenObtainPairSerializer,
     RoomSerializer, RoomDetailSerializer
 )
 from .pusher_client import pusher_client
@@ -115,6 +115,12 @@ class GoogleAuthView(APIView):
                     'last_name': user_info.get('family_name', ''),
                 }
             )
+
+            if not user.is_active:
+                return Response(
+                    {'error': 'Ce compte est suspendu. Contactez un administrateur.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
             # Create profile if it doesn't exist
             profile, profile_created = Profile.objects.get_or_create(
@@ -209,6 +215,8 @@ class GoogleAuthView(APIView):
                 'username': user.username,
                 'firstName': user.first_name,
                 'lastName': user.last_name,
+                'is_staff': user.is_staff,
+                'is_active': user.is_active,
                 'profile': profile_data
             }
         })
@@ -299,7 +307,7 @@ class PublicUserProfileView(generics.RetrieveAPIView):
         return super().get_queryset().select_related('profile')
 
 class CurrentUserView(generics.RetrieveAPIView):
-    serializer_class = UserSerializer
+    serializer_class = CurrentUserSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
@@ -1012,20 +1020,33 @@ class PusherAuthView(APIView):
 # Nouvelle vue pour obtenir les utilisateurs en ligne
 class OnlineUsersView(APIView):
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
-        # Récupérer tous les utilisateurs en ligne
         online_users = []
-        for key in redis_client.keys('user:*:online'):
-            if redis_client.get(key) == b'1':
-                user_id = key.decode('utf-8').split(':')[1]
+        current_user_id = request.user.id
+
+        if redis_available and redis_client:
+            for key in redis_client.keys('user:*:online'):
+                if str(redis_client.get(key)) != '1':
+                    continue
                 try:
-                    user = User.objects.get(id=user_id)
-                    user_serializer = UserSerializer(user, context={'request': request})
-                    online_users.append(user_serializer.data)
+                    user_id = int(key.split(':')[1])
+                except (IndexError, ValueError):
+                    continue
+                if user_id == current_user_id:
+                    continue
+                try:
+                    user = User.objects.select_related('profile').get(id=user_id)
+                    user.is_online = True
+                    online_users.append(
+                        UserSerializer(user, context={'request': request}).data
+                    )
                 except User.DoesNotExist:
                     pass
-        
+
+        online_users.sort(
+            key=lambda u: (u.get('display_name') or u.get('username') or '').lower()
+        )
         return Response(online_users)
 
 

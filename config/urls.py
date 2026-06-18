@@ -37,6 +37,7 @@ urlpatterns = [
 
     # Tes routes chat définies dans chat/urls.py
     path('api/chat/', include('chat.urls')),
+    path('api/admin/', include('chat.admin_urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 

@@ -248,7 +248,7 @@ ALLOWED_HOSTS = _dedupe(ALLOWED_HOSTS)
 # Django REST Framework and JWT configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'chat.authentication.ActiveJWTAuthentication',
     ),
 }
 

@@ -15,6 +15,7 @@ from .views import (
     CurrentUserView,
     PublicUserProfileView, HandleDisconnectView,
     UpdateOnlineStatusView,
+    OnlineUsersView,
     MarkMessagesReadView,
     RoomListCreateView,
     RoomDetailUpdateView,
@@ -33,6 +34,7 @@ urlpatterns = [
     path('messages/', MessageListCreateView.as_view(), name='messages'),
     path('messages/<int:pk>/', MessageDetailView.as_view(), name='message-detail'),
     path('users/', UserListView.as_view(), name='user-list'),
+    path('users/online/', OnlineUsersView.as_view(), name='online-users'),
 
     # Chat privé avec un autre utilisateur
     path('private/<int:user_id>/', PrivateChatView.as_view(), name='private-chat'),

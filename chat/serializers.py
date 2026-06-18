@@ -41,13 +41,19 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'Identifiants incorrects. Utilisez votre email ou votre identifiant.'
             )
 
+        if not user.is_active:
+            raise AuthenticationFailed(
+                'Ce compte est suspendu. Contactez un administrateur.',
+                code='account_suspended',
+            )
+
         self.user = user
         refresh = self.get_token(user)
         data = {
             'refresh': str(refresh),
             'access': str(refresh.access_token),
         }
-        user_serializer = UserSerializer(
+        user_serializer = CurrentUserSerializer(
             instance=user,
             context={'request': self.context.get('request')}
         )
@@ -109,7 +115,13 @@ class UserSerializer(serializers.ModelSerializer):
     def get_display_name(self, obj):
         return get_user_display_name(obj)
 
-from rest_framework import serializers
+
+class CurrentUserSerializer(UserSerializer):
+    is_staff = serializers.BooleanField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
+
+    class Meta(UserSerializer.Meta):
+        fields = UserSerializer.Meta.fields + ('is_staff', 'is_active')
 
 class ConversationCreateSerializer(serializers.Serializer):
     user_id = serializers.IntegerField(required=True)
