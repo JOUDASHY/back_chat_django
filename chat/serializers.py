@@ -208,7 +208,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = User
         fields = ('username', 'email', 'password', 'gender', 'first_name', 'last_name')
         extra_kwargs = {
-            'first_name': {'required': True},
+            'first_name': {'required': False},
             'last_name': {'required': True},
             'email': {'required': True},
         }
@@ -222,8 +222,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         gender = validated_data.pop('gender', None)
         validated_data.pop('username', None)
         email = validated_data['email']
-        first_name = validated_data['first_name'].strip()
-        last_name = validated_data['last_name'].strip()
+        first_name = validated_data.get('first_name', '').strip()
+        last_name = validated_data.get('last_name', '').strip()
 
         username = generate_unique_username(email.split('@')[0])
 
