@@ -63,9 +63,8 @@ urlpatterns = [
     path('profile/', UpdateProfileView.as_view(), name='update-profile'),
 
     # Mise à jour du statut en ligne
-    path('update-online-status/', UpdateOnlineStatusView.as_view(), name='update-online-status'),  # Ajoutez cette ligne
-     path('update-online-status/', UpdateOnlineStatusView.as_view(), name='update-online-status'),
-    path('handle-disconnect/', HandleDisconnectView.as_view(), name='handle-disconnect'),  # Ajoutez cette ligne
+    path('update-online-status/', UpdateOnlineStatusView.as_view(), name='update-online-status'),
+    path('handle-disconnect/', HandleDisconnectView.as_view(), name='handle-disconnect'),
 
     # Création et listing de rooms
     path('rooms/', RoomListCreateView.as_view(), name='rooms'),

@@ -253,13 +253,28 @@ class UpdateOnlineStatusView(APIView):
     def post(self, request):
         user = request.user
         is_online = request.data.get('isOnline', True)
+        profile = user.profile
 
         if redis_available:
             update_online_status(user.id, is_online)
+
+        now = timezone.now()
+
+        if not is_online:
+            # Déconnexion : sauvegarder last_online = maintenant
+            profile.last_online = now
+            profile.status = 'offline'
+            profile.save(update_fields=['last_online', 'status'])
+            pusher_client.trigger('presence-channel', 'user-status-changed', {
+                'userId': user.id,
+                'isOnline': False,
+                'lastOnline': profile.last_online.isoformat(),
+            })
         else:
-            # Fallback si Redis n'est pas disponible
-            user.profile.status = 'online' if is_online else 'offline'
-            user.profile.save()
+            # Heartbeat : garder last_online à jour pendant la session (max 2 min d'écart)
+            profile.last_online = now
+            profile.status = 'online'
+            profile.save(update_fields=['last_online', 'status'])
 
         return Response({"status": "online" if is_online else "offline"})
 
@@ -269,8 +284,18 @@ class HandleDisconnectView(APIView):
     def post(self, request):
         user = request.user
         update_online_status(user.id, False)
+        # Sauvegarder last_online = moment exact de la déconnexion
+        profile = user.profile
+        profile.last_online = timezone.now()
+        profile.status = 'offline'
+        profile.save(update_fields=['last_online', 'status'])
+        # Notifier via Pusher
+        pusher_client.trigger('presence-channel', 'user-status-changed', {
+            'userId': user.id,
+            'isOnline': False,
+            'lastOnline': profile.last_online.isoformat(),
+        })
         return Response({"status": "offline"})
-
 
 
 class LoginView(TokenObtainPairView):
@@ -279,20 +304,18 @@ class LoginView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
 
-        # Mettre à jour le statut et last_seen lors de la connexion
         if response.status_code == 200:
             user = resolve_user_by_login_identifier(request.data.get('username'))
             if not user:
                 return response
             profile = user.profile
             profile.status = 'online'
-            profile.save()
+            profile.last_online = timezone.now()
+            profile.save(update_fields=['status', 'last_online'])
             update_online_status(user.id, True)
-
-            # Déclencher un événement Pusher
             pusher_client.trigger('presence-channel', 'user-status-changed', {
                 'userId': user.id,
-                'isOnline': True
+                'isOnline': True,
             })
 
         return response
@@ -776,9 +799,8 @@ class PrivateChatView(generics.ListCreateAPIView):
                 }
             )
             
-            # Mettre à jour last_seen pour l'expéditeur
-            self.request.user.profile.last_seen = timezone.now()
-            self.request.user.profile.save()
+            # Supprimer last_seen ici — il doit refléter la session, pas l'activité de messagerie
+            # last_seen est mis à jour à la connexion et à la déconnexion
             
         except IntegrityError as e:
             raise e

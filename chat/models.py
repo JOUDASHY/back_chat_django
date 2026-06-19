@@ -37,6 +37,7 @@ class Profile(models.Model):
     website = models.URLField(max_length=200, null=True, blank=True)
     social_links = models.JSONField(null=True, blank=True, default=dict)
     last_seen = models.DateTimeField(null=True, blank=True)
+    last_online = models.DateTimeField(null=True, blank=True)  # Dernière fois connecté à l'app
     is_verified = models.BooleanField(default=False)
     theme_preference = models.CharField(max_length=20, default='light', null=True, blank=True)
     language_preference = models.CharField(max_length=10, default='fr', null=True, blank=True)

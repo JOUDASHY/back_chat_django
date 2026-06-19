@@ -72,7 +72,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = (
             'image', 'cover_image', 'bio', 'lieu', 'date_naiv', 'gender',
             'phone_number', 'status', 'passion', 'profession', 'website',
-            'social_links', 'last_seen', 'is_verified', 'theme_preference',
+            'social_links', 'last_seen', 'last_online', 'is_verified', 'theme_preference',
             'language_preference', 'notification_preferences', 'age',
             'created_at', 'updated_at'
         )
