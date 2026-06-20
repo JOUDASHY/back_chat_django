@@ -90,6 +90,7 @@ class ProfileSerializer(serializers.ModelSerializer):
 
 
 from .models import Message, Room
+from .reaction_utils import serialize_message_reactions
 
 User = get_user_model()
 # from rest_framework import serializers
@@ -152,6 +153,14 @@ class MessageSerializer(serializers.ModelSerializer):
     # allow_blank=True so file-only messages don't fail validation
     content = serializers.CharField(required=False, allow_blank=True, default='')
     attachment = serializers.FileField(required=False, allow_null=True)
+    reactions = serializers.SerializerMethodField(read_only=True)
+
+    def get_reactions(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return []
+        return serialize_message_reactions(obj, user)
 
     def get_sender_profile(self, obj):
         request = self.context.get('request')
@@ -177,9 +186,9 @@ class MessageSerializer(serializers.ModelSerializer):
         model = Message
         fields = [
             "id", "sender", "sender_profile", "recipient", "room", "content",
-            "timestamp", "attachment", "is_read", "read_at", "call_event",
+            "timestamp", "attachment", "is_read", "read_at", "call_event", "reactions",
         ]
-        read_only_fields = ["id", "sender", "sender_profile", "timestamp", "is_read", "read_at"]
+        read_only_fields = ["id", "sender", "sender_profile", "timestamp", "is_read", "read_at", "reactions"]
 
         
              

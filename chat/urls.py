@@ -20,6 +20,7 @@ from .views import (
     RoomListCreateView,
     RoomDetailUpdateView,
     MessageDetailView,
+    MessageReactionView,
     TypingView,
     BlockUserView,
     UnblockUserView,
@@ -37,6 +38,7 @@ urlpatterns = [
     # Tous les messages (non filtrés)
     path('messages/', MessageListCreateView.as_view(), name='messages'),
     path('messages/<int:pk>/', MessageDetailView.as_view(), name='message-detail'),
+    path('messages/<int:pk>/reactions/', MessageReactionView.as_view(), name='message-reaction'),
     path('users/', UserListView.as_view(), name='user-list'),
     path('users/online/', OnlineUsersView.as_view(), name='online-users'),
 

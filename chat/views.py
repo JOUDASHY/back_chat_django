@@ -549,6 +549,7 @@ class GroupChatView(generics.ListCreateAPIView):
         room_id = self.kwargs["room_id"]
         return Message.objects.filter(room_id=room_id)\
             .select_related('sender__profile', 'recipient__profile')\
+            .prefetch_related('reactions__user')\
             .order_by("timestamp")
 
     def create(self, request, *args, **kwargs):
@@ -711,6 +712,7 @@ class PrivateChatView(generics.ListCreateAPIView):
             Q(sender=user, recipient_id=other_id) |
             Q(sender_id=other_id, recipient=user)
         ).select_related('sender__profile', 'recipient__profile')\
+         .prefetch_related('reactions__user')\
          .order_by("timestamp")
     
     def list(self, request, *args, **kwargs):
@@ -876,6 +878,42 @@ class MessageDetailView(APIView):
             pusher_client.trigger(f"private-chat-{a}-{b}", 'message-deleted', payload)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MessageReactionView(APIView):
+    """Ajouter, modifier ou retirer une réaction emoji sur un message."""
+    permission_classes = [IsAuthenticated]
+
+    def _trigger_reaction_event(self, msg: Message, payload: dict):
+        if msg.room_id:
+            pusher_client.trigger(f"group-chat-{msg.room_id}", 'message-reaction', payload)
+        elif msg.recipient_id:
+            a, b = sorted([msg.sender_id, msg.recipient_id])
+            pusher_client.trigger(f"private-chat-{a}-{b}", 'message-reaction', payload)
+
+    def post(self, request, pk):
+        from .reaction_utils import (
+            ALLOWED_REACTION_EMOJIS,
+            toggle_message_reaction,
+            user_can_react_to_message,
+        )
+
+        msg = get_object_or_404(
+            Message.objects.select_related('room').prefetch_related('room__participants', 'reactions__user'),
+            pk=pk,
+        )
+
+        if not user_can_react_to_message(msg, request.user):
+            raise PermissionDenied("Vous ne pouvez pas réagir à ce message.")
+
+        emoji = (request.data.get('emoji') or '').strip()
+        if emoji not in ALLOWED_REACTION_EMOJIS:
+            return Response({'error': 'Emoji de réaction invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reactions = toggle_message_reaction(message=msg, user=request.user, emoji=emoji)
+        payload = {'message_id': msg.id, 'reactions': reactions}
+        self._trigger_reaction_event(msg, payload)
+        return Response(payload)
 
 
 class TypingView(APIView):

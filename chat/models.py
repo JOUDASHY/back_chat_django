@@ -115,6 +115,29 @@ class Message(models.Model):
         return f"{self.sender.username}: {self.content[:20]}{attachment_info}"
 
 
+class MessageReaction(models.Model):
+    """Réaction emoji sur un message (une par utilisateur, modifiable)."""
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name='reactions',
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='message_reactions',
+    )
+    emoji = models.CharField(max_length=32)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('message', 'user')
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.user.username} {self.emoji} on msg#{self.message_id}"
+
+
 class CallLog(models.Model):
     CALL_TYPE_CHOICES = [('audio', 'Audio'), ('video', 'Vidéo')]
     STATUS_CHOICES = [
