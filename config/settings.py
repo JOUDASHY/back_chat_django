@@ -347,7 +347,8 @@ CHANNEL_LAYERS = {
 # Use Redis for session backend
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
-
+DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
 
 print(f"Redis Host: {REDIS_HOST}")
 print(f"Redis Port: {REDIS_PORT}")
