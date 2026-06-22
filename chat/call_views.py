@@ -132,20 +132,19 @@ class CallRespondView(APIView):
             if log:
                 broadcast_call_message(log, request)
             _notify_user(caller_id, 'call-rejected', {'room_name': room_name})
+            _notify_user(request.user.id, 'call-rejected', {'room_name': room_name})
             return Response({'status': 'rejected'})
 
         accept_call_log(room_name)
         cfg = get_livekit_config()
         token = create_livekit_token(room_name=room_name, user=request.user)
 
-        _notify_user(
-            caller_id,
-            'call-accepted',
-            {
-                'room_name': room_name,
-                'user': _user_call_payload(request.user, request),
-            },
-        )
+        payload = {
+            'room_name': room_name,
+            'user': _user_call_payload(request.user, request),
+        }
+        _notify_user(caller_id, 'call-accepted', payload)
+        _notify_user(request.user.id, 'call-accepted', payload)
 
         return Response({
             'room_name': room_name,
@@ -174,14 +173,12 @@ class CallEndView(APIView):
         if log:
             broadcast_call_message(log, request)
 
-        _notify_user(
-            peer_id,
-            'call-ended',
-            {
-                'room_name': room_name,
-                'ended_by': request.user.id,
-            },
-        )
+        payload = {
+            'room_name': room_name,
+            'ended_by': request.user.id,
+        }
+        _notify_user(peer_id, 'call-ended', payload)
+        _notify_user(request.user.id, 'call-ended', payload)
 
         return Response({'status': 'ended'})
 
