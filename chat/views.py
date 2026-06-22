@@ -1189,3 +1189,100 @@ class BlockedUsersListView(generics.ListAPIView):
     def get_queryset(self):
         blocked_ids = Block.objects.filter(blocker=self.request.user).values_list('blocked_id', flat=True)
         return User.objects.filter(id__in=blocked_ids).select_related('profile')
+
+
+class ForwardMessageView(APIView):
+    """Transférer un message vers un autre utilisateur ou un groupe."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        from django.core.files.base import ContentFile
+        import os
+        from .call_service import message_preview
+
+        # Vérifier que le message existe
+        original_msg = get_object_or_404(Message, pk=pk)
+
+        recipient_id = request.data.get('recipient_id')
+        room_id = request.data.get('room_id')
+
+        if not recipient_id and not room_id:
+            return Response(
+                {"error": "recipient_id ou room_id est requis."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        new_msg = Message(
+            sender=request.user,
+            content=original_msg.content,
+        )
+
+        # Vérifier les permissions et affecter le destinataire/groupe
+        if room_id:
+            room = get_object_or_404(Room, pk=room_id)
+            if not room.participants.filter(id=request.user.id).exists():
+                raise PermissionDenied("Vous n'êtes pas membre de ce groupe.")
+            new_msg.room = room
+        else:
+            recipient = get_object_or_404(User, pk=recipient_id)
+            new_msg.recipient = recipient
+            
+        new_msg.save()
+
+        # Gérer la pièce jointe
+        if original_msg.attachment:
+            try:
+                # On copie le fichier
+                file_name = os.path.basename(original_msg.attachment.name)
+                # Le save=True sauvegardera le nouveau nom/chemin dans l'objet
+                new_msg.attachment.save(file_name, ContentFile(original_msg.attachment.read()), save=True)
+            except Exception as e:
+                print(f"Erreur lors de la copie de la pièce jointe: {e}")
+
+        # Notifier via Pusher
+        message_data = MessageSerializer(new_msg, context={'request': request}).data
+        
+        preview = message_preview(new_msg)
+        ts = new_msg.timestamp.isoformat()
+
+        if new_msg.room:
+            pusher_client.trigger(f"group-chat-{new_msg.room.id}", 'new-message', message_data)
+            for participant in new_msg.room.participants.all():
+                pusher_client.trigger(
+                    f"user-{participant.id}-conversations",
+                    'new-message',
+                    {
+                        'conversation': {
+                            'id': new_msg.room.id,
+                            'lastMessage': preview,
+                            'timestamp': ts,
+                            'incrementUnread': participant.id != request.user.id,
+                            'lastMessageSeen': participant.id == request.user.id,
+                            'lastMessageSenderId': request.user.id,
+                            'lastMessageIsRead': False,
+                        }
+                    }
+                )
+        elif new_msg.recipient:
+            a, b = sorted([request.user.id, new_msg.recipient.id])
+            pusher_client.trigger(f"private-chat-{a}-{b}", 'new-message', message_data)
+            conversation_id = int(f"{a}{b}")
+
+            for uid, is_recipient in [(request.user.id, False), (new_msg.recipient.id, True)]:
+                pusher_client.trigger(
+                    f"user-{uid}-conversations",
+                    'new-message',
+                    {
+                        'conversation': {
+                            'id': conversation_id,
+                            'lastMessage': preview,
+                            'timestamp': ts,
+                            'incrementUnread': is_recipient,
+                            'lastMessageSeen': not is_recipient,
+                            'lastMessageSenderId': request.user.id,
+                            'lastMessageIsRead': False,
+                        }
+                    }
+                )
+
+        return Response(message_data, status=status.HTTP_201_CREATED)

@@ -26,6 +26,7 @@ from .views import (
     UnblockUserView,
     BlockStatusView,
     BlockedUsersListView,
+    ForwardMessageView,
 )
 from .call_views import CallStartView, CallRespondView, CallEndView, CallHistoryView
 
@@ -41,6 +42,7 @@ urlpatterns = [
     path('messages/<int:pk>/reactions/', MessageReactionView.as_view(), name='message-reaction'),
     path('users/', UserListView.as_view(), name='user-list'),
     path('users/online/', OnlineUsersView.as_view(), name='online-users'),
+    path('messages/<int:pk>/forward/', ForwardMessageView.as_view(), name='message-forward'),
 
     # Chat privé avec un autre utilisateur
     path('private/<int:user_id>/', PrivateChatView.as_view(), name='private-chat'),
