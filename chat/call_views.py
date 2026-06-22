@@ -23,7 +23,7 @@ from .livekit_utils import (
     get_livekit_config,
     livekit_is_configured,
 )
-from .models import CallLog
+from .models import CallLog, Block
 from .pusher_client import pusher_client
 from .utils import get_user_display_name
 
@@ -45,7 +45,6 @@ def _user_call_payload(user, request):
 
 def _notify_user(user_id: int, event: str, payload: dict):
     pusher_client.trigger(f'user-{user_id}-calls', event, payload)
-
 
 class CallStartView(APIView):
     """Démarrer un appel audio ou vidéo 1-à-1."""
@@ -73,6 +72,14 @@ class CallStartView(APIView):
             return Response({'error': 'Impossible de vous appeler vous-même.'}, status=400)
 
         recipient = get_object_or_404(User, pk=recipient_id)
+
+        # Vérifier si l'un des utilisateurs a bloqué l'autre
+        if Block.objects.filter(
+            Q(blocker=request.user, blocked=recipient) |
+            Q(blocker=recipient, blocked=request.user)
+        ).exists():
+            return Response({'error': 'Impossible d\'appeler cet utilisateur.'}, status=status.HTTP_403_FORBIDDEN)
+
         suffix = uuid.uuid4().hex[:10]
         room_name = build_call_room_name(request.user.id, recipient_id, suffix)
         cfg = get_livekit_config()
