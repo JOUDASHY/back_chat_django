@@ -374,9 +374,16 @@ class UserListView(generics.ListAPIView):
     search_fields = ['username', 'first_name', 'last_name', 'email', 'profile__profession', 'profile__lieu']
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related('profile')
-        for user in queryset:
-            user.is_online = bool(int(redis_client.get(f'user:{user.id}:online') or 0))
+        user = self.request.user
+        
+        # Obtenir les IDs des utilisateurs bloqués ou qui m'ont bloqué
+        blocked_by_me = Block.objects.filter(blocker=user).values_list('blocked_id', flat=True)
+        blocked_me = Block.objects.filter(blocked=user).values_list('blocker_id', flat=True)
+        excluded_ids = set(blocked_by_me) | set(blocked_me)
+
+        queryset = super().get_queryset().exclude(id__in=excluded_ids).select_related('profile')
+        for u in queryset:
+            u.is_online = bool(int(redis_client.get(f'user:{u.id}:online') or 0))
         return queryset
 
 
@@ -1092,15 +1099,22 @@ class OnlineUsersView(APIView):
         online_users = []
         current_user_id = request.user.id
 
+        # Obtenir les IDs des utilisateurs bloqués ou qui m'ont bloqué
+        blocked_by_me = Block.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
+        blocked_me = Block.objects.filter(blocked=request.user).values_list('blocker_id', flat=True)
+        excluded_ids = set(blocked_by_me) | set(blocked_me)
+
         if redis_available and redis_client:
             for key in redis_client.keys('user:*:online'):
                 if str(redis_client.get(key)) != '1':
                     continue
                 try:
-                    user_id = int(key.split(':')[1])
-                except (IndexError, ValueError):
+                    # Gérer si key est en bytes ou string
+                    decoded_key = key.decode('utf-8') if isinstance(key, bytes) else key
+                    user_id = int(decoded_key.split(':')[1])
+                except (IndexError, ValueError, AttributeError):
                     continue
-                if user_id == current_user_id:
+                if user_id == current_user_id or user_id in excluded_ids:
                     continue
                 try:
                     user = User.objects.select_related('profile').get(id=user_id)
