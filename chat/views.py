@@ -468,7 +468,6 @@ class ConversationListView(APIView):
                 Message.objects
                 .filter(room=room)
                 .order_by('-timestamp')
-                .values('content', 'timestamp', 'sender_id', 'is_read')
                 .first()
             )
             if last:
@@ -492,15 +491,15 @@ class ConversationListView(APIView):
                 group_data.append({
                     'id': room.id,
                     'name': room.name,
-                    'lastMessage': last['content'],
-                    'timestamp': last['timestamp'],
+                    'lastMessage': message_preview(last),
+                    'timestamp': last.timestamp,
                     'isGroup': True,
                     'user': None,
                     'participants': participants_data,
                     'unreadCount': unread_count,
-                    'lastMessageSeen': last['sender_id'] == user.id or last['is_read'],
-                    'lastMessageSenderId': last['sender_id'],
-                    'lastMessageIsRead': last['is_read'],
+                    'lastMessageSeen': last.sender_id == user.id or last.is_read,
+                    'lastMessageSenderId': last.sender_id,
+                    'lastMessageIsRead': last.is_read,
                 })
 
         # Conversations privées

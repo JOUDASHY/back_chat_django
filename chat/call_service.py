@@ -35,7 +35,28 @@ def message_preview(message) -> str:
     """Texte affiché dans la sidebar pour un message (y compris appels)."""
     if getattr(message, 'call_event', None):
         return format_call_preview(message.call_event)
-    return message.content or ''
+    
+    content = message.content or ''
+    attachment = getattr(message, 'attachment', None)
+    
+    if attachment and not content:
+        filename = getattr(attachment, 'name', '') or ''
+        filename = filename.lower()
+        if filename.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic')):
+            return '📷 Photo'
+        elif filename.endswith(('.mp4', '.mov', '.avi', '.mkv')):
+            return '🎥 Vidéo'
+        elif filename.endswith(('.mp3', '.wav', '.ogg', '.m4a', '.webm')):
+            basename = filename.split('/')[-1].split('\\')[-1]
+            if basename.startswith('voice_'):
+                return '🎤 Message vocal'
+            return '🎵 Audio'
+        elif filename.endswith(('.pdf')):
+            return '📄 Fichier PDF'
+        else:
+            return '📎 Fichier joint'
+        
+    return content
 
 
 def start_call_log(*, room_name: str, caller, recipient, call_type: str) -> CallLog:
