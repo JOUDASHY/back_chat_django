@@ -64,13 +64,25 @@ class GoogleAuthView(APIView):
             )
 
         # ⇩ ici, on pointe sur le front
-        redirect_uri = f"{settings.FRONTEND_URL}/auth/google/callback"
+        ALLOWED_REDIRECTS = [
+            f"{settings.FRONTEND_URL}/auth/google/callback",
+            "com.chatbeast.app://auth/google/callback",
+        ]
 
+        redirect_uri = request.GET.get(
+            "redirect_uri",
+            f"{settings.FRONTEND_URL}/auth/google/callback"
+        )
+
+        if redirect_uri not in ALLOWED_REDIRECTS:
+            redirect_uri = f"{settings.FRONTEND_URL}/auth/google/callback"
+            
         scopes = [
             'openid',
             'https://www.googleapis.com/auth/userinfo.email',
             'https://www.googleapis.com/auth/userinfo.profile',
         ]
+
 
         # 1️⃣ Pas de code → on demande l'URL d'auth
         if 'code' not in request.GET:
