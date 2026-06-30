@@ -32,6 +32,7 @@ from .views import (
     ToggleFavoriteView,
     TogglePinView,
     SavedMessagesView,
+    AISaveResponseView,
 )
 from .call_views import CallStartView, CallRespondView, CallEndView, CallHistoryView
 
@@ -95,6 +96,9 @@ urlpatterns = [
     path('messages/<int:pk>/favorite/', ToggleFavoriteView.as_view(), name='message-favorite'),
     path('messages/<int:pk>/pin/', TogglePinView.as_view(), name='message-pin'),
     path('saved/', SavedMessagesView.as_view(), name='saved-messages'),
+
+    # Sauvegarde réponse IA
+    path('ai/save/', AISaveResponseView.as_view(), name='ai-save'),
 
     # Blocage utilisateur
     path('users/<int:user_id>/block/', BlockUserView.as_view(), name='block-user'),

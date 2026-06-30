@@ -631,6 +631,55 @@ class GroupChatView(generics.ListCreateAPIView):
         return Response(message_data, status=status.HTTP_201_CREATED)
 
 
+class AISaveResponseView(APIView):
+    """Sauvegarde une réponse IA comme message de l'assistant vers l'utilisateur connecté."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        content = request.data.get('content', '').strip()
+        if not content:
+            return Response({'error': 'Contenu requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        assistant = get_object_or_404(User, username=AI_USERNAME)
+        user = request.user
+
+        msg = Message.objects.create(
+            sender=assistant,
+            recipient=user,
+            content=content,
+        )
+
+        message_data = MessageSerializer(msg, context={'request': request}).data
+
+        a, b = sorted([user.id, assistant.id])
+        pusher_client.trigger(f"private-chat-{a}-{b}", 'new-message', message_data)
+
+        conversation_id = int(f"{a}{b}")
+
+        for uid, is_recipient in [(user.id, False), (assistant.id, True)]:
+            pusher_client.trigger(
+                f"user-{uid}-conversations",
+                'new-message',
+                {
+                    'conversation': {
+                        'id': conversation_id,
+                        'name': get_user_display_name(assistant if uid == user.id else user),
+                        'lastMessage': message_preview(msg),
+                        'timestamp': msg.timestamp.isoformat(),
+                        'isGroup': False,
+                        'userId': assistant.id if uid == user.id else user.id,
+                        'user': UserSerializer(assistant if uid == user.id else user, context={'request': request}).data,
+                        'incrementUnread': is_recipient,
+                        'lastMessageSeen': not is_recipient,
+                        'lastMessageSenderId': assistant.id,
+                        'lastMessageIsRead': False,
+                    }
+                }
+            )
+
+        return Response(message_data, status=status.HTTP_201_CREATED)
+
+
 class RoomListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     
