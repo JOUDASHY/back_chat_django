@@ -27,6 +27,8 @@ from .views import (
     BlockStatusView,
     BlockedUsersListView,
     ForwardMessageView,
+    ProfileImageView,
+    ProfileImageDeleteView,
 )
 from .call_views import CallStartView, CallRespondView, CallEndView, CallHistoryView
 
@@ -80,6 +82,11 @@ urlpatterns = [
     path('calls/respond/', CallRespondView.as_view(), name='call-respond'),
     path('calls/end/', CallEndView.as_view(), name='call-end'),
     path('calls/history/', CallHistoryView.as_view(), name='call-history'),
+
+    # Images de collection du profil
+    path('profile/images/', ProfileImageView.as_view(), name='profile-images'),
+    path('profile/images/<int:user_id>/', ProfileImageView.as_view(), name='profile-images-user'),
+    path('profile/images/delete/<int:pk>/', ProfileImageDeleteView.as_view(), name='profile-image-delete'),
 
     # Blocage utilisateur
     path('users/<int:user_id>/block/', BlockUserView.as_view(), name='block-user'),

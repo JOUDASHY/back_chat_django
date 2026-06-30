@@ -20,6 +20,9 @@ PUSHER_SECRET  = os.getenv('PUSHER_SECRET')
 PUSHER_CLUSTER = os.getenv('PUSHER_CLUSTER')
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 
+# Groq API (AI assistant)
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+
 # LiveKit (appels audio/vidéo self-hosted)
 LIVEKIT_URL = os.getenv('LIVEKIT_URL', '')
 LIVEKIT_API_KEY = os.getenv('LIVEKIT_API_KEY', '')

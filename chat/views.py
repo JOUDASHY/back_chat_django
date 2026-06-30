@@ -35,16 +35,17 @@ from oauthlib.oauth2 import OAuth2Error
 from requests.exceptions import RequestException
 
 # Local imports
-from .models import Message, Room, Profile, Block
+from .models import Message, Room, Profile, Block, ProfileImage
 from .serializers import (
     MessageSerializer, RegisterSerializer, UserUpdateSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
     ConversationSerializer, UserSerializer, CurrentUserSerializer, CustomTokenObtainPairSerializer,
-    RoomSerializer, RoomDetailSerializer
+    RoomSerializer, RoomDetailSerializer, ProfileImageSerializer
 )
 from .pusher_client import pusher_client
 from .call_service import message_preview
 from .utils import update_online_status, redis_client, redis_available, get_user_display_name, resolve_user_by_login_identifier
+from .groq_service import call_groq, AI_USERNAME, GROQ_API_URL
 
 # Configure logger and environment
 logger = logging.getLogger(__name__)
@@ -369,6 +370,27 @@ class UpdateProfileView(generics.UpdateAPIView):
 
 
 
+class ProfileImageView(generics.ListCreateAPIView):
+    serializer_class = ProfileImageSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.JSONParser]
+
+    def get_queryset(self):
+        user_id = self.kwargs.get('user_id') or self.request.user.id
+        return ProfileImage.objects.filter(user_id=user_id)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class ProfileImageDeleteView(generics.DestroyAPIView):
+    serializer_class = ProfileImageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return ProfileImage.objects.filter(user=self.request.user)
+
+
 class UserDetailView(RetrieveAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
@@ -567,7 +589,7 @@ class GroupChatView(generics.ListCreateAPIView):
         room_id = self.kwargs["room_id"]
         return Message.objects.filter(room_id=room_id)\
             .select_related('sender__profile', 'recipient__profile')\
-            .prefetch_related('reactions__user')\
+            .prefetch_related('reactions__user', 'replies')\
             .order_by("timestamp")
 
     def create(self, request, *args, **kwargs):
@@ -578,6 +600,10 @@ class GroupChatView(generics.ListCreateAPIView):
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        parent_msg = serializer.validated_data.get('parent')
+        if parent_msg and parent_msg.room_id != room_id:
+            raise ValidationError({'parent': 'Le message parent doit appartenir à cette conversation de groupe.'})
 
         try:
             msg = serializer.save(sender=self.request.user, room_id=room_id)
@@ -730,7 +756,7 @@ class PrivateChatView(generics.ListCreateAPIView):
             Q(sender=user, recipient_id=other_id) |
             Q(sender_id=other_id, recipient=user)
         ).select_related('sender__profile', 'recipient__profile')\
-         .prefetch_related('reactions__user')\
+         .prefetch_related('reactions__user', 'replies')\
          .order_by("timestamp")
     
     def list(self, request, *args, **kwargs):
@@ -771,6 +797,14 @@ class PrivateChatView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         other_id = self.kwargs["user_id"]
         other_user = get_object_or_404(User, pk=other_id)
+
+        parent_msg = serializer.validated_data.get('parent')
+        if parent_msg:
+            if parent_msg.room_id is not None or not (
+                (parent_msg.sender_id == self.request.user.id and parent_msg.recipient_id == other_id) or
+                (parent_msg.sender_id == other_id and parent_msg.recipient_id == self.request.user.id)
+            ):
+                raise ValidationError({'parent': 'Le message parent doit appartenir à cette conversation privée.'})
 
         # Vérifier si un blocage existe dans un sens ou l'autre
         if Block.objects.filter(
@@ -821,7 +855,11 @@ class PrivateChatView(generics.ListCreateAPIView):
             
             # Supprimer last_seen ici — il doit refléter la session, pas l'activité de messagerie
             # last_seen est mis à jour à la connexion et à la déconnexion
-            
+
+            # AI auto-response : si le destinataire est le user assistant
+            if other_user.username == AI_USERNAME and msg.content != "Conversation démarrée":
+                self._trigger_ai_response(msg, other_user, a, b, conversation_id)
+
         except IntegrityError as e:
             raise e
         except ValidationError as e:
@@ -830,6 +868,72 @@ class PrivateChatView(generics.ListCreateAPIView):
         except Exception as e:
             print(f"Unexpected error: {e}")
             raise e
+
+    def _trigger_ai_response(self, user_msg: Message, assistant_user, a: int, b: int, conversation_id: int):
+        """Génère et envoie la réponse IA après un message adressé à l'assistant."""
+
+        try:
+            # Récupérer l'historique (20 derniers messages de la conversation)
+            user = self.request.user
+            history_qs = Message.objects.filter(
+                (Q(sender=user, recipient=assistant_user) | Q(sender=assistant_user, recipient=user)),
+                room__isnull=True
+            ).order_by('-timestamp')[:20]
+
+            history_messages = []
+            for m in reversed(history_qs):
+                role = 'user' if m.sender == user else 'assistant'
+                history_messages.append({'role': role, 'content': m.content or ''})
+
+            # Appeler Groq
+            ai_reply = call_groq(history_messages)
+            if not ai_reply:
+                return
+
+            # Créer le message de réponse de l'assistant
+            ai_msg = Message.objects.create(
+                sender=assistant_user,
+                recipient=user,
+                content=ai_reply,
+            )
+
+            # Diffuser via Pusher
+            message_data = MessageSerializer(ai_msg, context={'request': self.request}).data
+            pusher_client.trigger(f"private-chat-{a}-{b}", 'new-message', message_data)
+
+            # Sidebar : mettre à jour les deux utilisateurs
+            # Pour l'expéditeur original (reçoit la réponse)
+            pusher_client.trigger(
+                f"user-{user.id}-conversations",
+                'new-message',
+                {
+                    'conversation': self._private_sidebar_conversation(
+                        conversation_id,
+                        ai_msg,
+                        assistant_user,
+                        increment_unread=False,
+                        last_message_seen=True,
+                    )
+                }
+            )
+
+            # Pour l'assistant (ne reçoit pas de notification mais la sidebar doit rester à jour)
+            pusher_client.trigger(
+                f"user-{assistant_user.id}-conversations",
+                'new-message',
+                {
+                    'conversation': self._private_sidebar_conversation(
+                        conversation_id,
+                        ai_msg,
+                        user,
+                        increment_unread=False,
+                        last_message_seen=True,
+                    )
+                }
+            )
+
+        except Exception as e:
+            logger.exception("AI response failed: %s", e)
 
 
 class MessageDetailView(APIView):

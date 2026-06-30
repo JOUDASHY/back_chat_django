@@ -99,6 +99,13 @@ class Message(models.Model):
         null=True,
         blank=True
     )
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='replies'
+    )
     content = models.TextField(blank=True, default='')
     attachment = models.FileField(upload_to='message_attachments/', null=True, blank=True)
     is_read = models.BooleanField(default=False)
@@ -169,6 +176,21 @@ class CallLog(models.Model):
 
     def __str__(self):
         return f"{self.call_type} {self.status} {self.caller_id}→{self.recipient_id}"
+
+
+class ProfileImage(models.Model):
+    """Image de collection sur le profil utilisateur."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='profile_images')
+    image = models.ImageField(upload_to='profile_gallery/')
+    caption = models.CharField(max_length=200, null=True, blank=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['order', '-created_at']
+
+    def __str__(self):
+        return f"Image #{self.id} de {self.user.username}"
 
 
 class Block(models.Model):

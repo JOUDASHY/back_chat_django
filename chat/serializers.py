@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.models import User
 # from rest_framework import serializers
-from .models import Profile
+from .models import Profile, ProfileImage
 # serializers.py
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.models import User
@@ -103,7 +103,7 @@ from .models import Room
 
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(read_only=True)
-    is_online = serializers.BooleanField(read_only=True)
+    is_online = serializers.SerializerMethodField()
     display_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -115,6 +115,16 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_display_name(self, obj):
         return get_user_display_name(obj)
+
+    def get_is_online(self, obj):
+        if obj.username == 'assistant':
+            return True
+        try:
+            from .utils import redis_client
+            val = redis_client.get(f'user:{obj.id}:online')
+            return bool(int(val or 0))
+        except Exception:
+            return False
 
 
 class CurrentUserSerializer(UserSerializer):
@@ -150,6 +160,13 @@ class MessageSerializer(serializers.ModelSerializer):
         queryset=Room.objects.all(),
         required=False, allow_null=True
     )
+    parent = serializers.PrimaryKeyRelatedField(
+        queryset=Message.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    parent_message = serializers.SerializerMethodField(read_only=True)
+    replies_count = serializers.SerializerMethodField(read_only=True)
     # allow_blank=True so file-only messages don't fail validation
     content = serializers.CharField(required=False, allow_blank=True, default='')
     attachment = serializers.FileField(required=False, allow_null=True)
@@ -173,6 +190,29 @@ class MessageSerializer(serializers.ModelSerializer):
         except Exception:
             return {'image': None}
 
+    def get_parent_message(self, obj):
+        if not obj.parent:
+            return None
+        request = self.context.get('request')
+        parent = obj.parent
+        sender_profile = None
+        try:
+            profile = parent.sender.profile
+            if profile.image:
+                sender_profile = {'image': request.build_absolute_uri(profile.image.url) if request else profile.image.url}
+        except Exception:
+            sender_profile = {'image': None}
+
+        return {
+            'id': parent.id,
+            'sender': str(parent.sender),
+            'content': parent.content,
+            'sender_profile': sender_profile,
+        }
+
+    def get_replies_count(self, obj):
+        return obj.replies.count()
+
     def validate(self, attrs):
         if attrs.get('call_event'):
             return attrs
@@ -185,10 +225,10 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = [
-            "id", "sender", "sender_profile", "recipient", "room", "content",
+            "id", "sender", "sender_profile", "recipient", "room", "parent", "parent_message", "replies_count", "content",
             "timestamp", "attachment", "is_read", "read_at", "call_event", "reactions",
         ]
-        read_only_fields = ["id", "sender", "sender_profile", "timestamp", "is_read", "read_at", "reactions"]
+        read_only_fields = ["id", "sender", "sender_profile", "timestamp", "is_read", "read_at", "reactions", "parent_message", "replies_count"]
 
         
              
@@ -363,3 +403,21 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         profile.save()
 
         return instance
+
+
+class ProfileImageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProfileImage
+        fields = ['id', 'image', 'image_url', 'caption', 'order', 'created_at']
+        read_only_fields = ['id', 'created_at', 'image_url']
+
+    def get_image_url(self, obj):
+        if obj.image and 'request' in self.context:
+            return self.context['request'].build_absolute_uri(obj.image.url)
+        return None
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
