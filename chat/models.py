@@ -193,6 +193,27 @@ class ProfileImage(models.Model):
         return f"Image #{self.id} de {self.user.username}"
 
 
+class SavedMessage(models.Model):
+    """Message favori ou épinglé par un utilisateur."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_messages')
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name='saved_by')
+    is_favorite = models.BooleanField(default=False)
+    is_pinned = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'message')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        parts = [self.user.username]
+        if self.is_favorite:
+            parts.append('⭐')
+        if self.is_pinned:
+            parts.append('📌')
+        return f"{' '.join(parts)} msg#{self.message_id}"
+
+
 class Block(models.Model):
     """User1 bloque User2 — relation directionnelle."""
     blocker = models.ForeignKey(User, on_delete=models.CASCADE, related_name='blocking')

@@ -171,6 +171,23 @@ class MessageSerializer(serializers.ModelSerializer):
     content = serializers.CharField(required=False, allow_blank=True, default='')
     attachment = serializers.FileField(required=False, allow_null=True)
     reactions = serializers.SerializerMethodField(read_only=True)
+    is_favorite = serializers.SerializerMethodField(read_only=True)
+    is_pinned = serializers.SerializerMethodField(read_only=True)
+
+    def _saved_flag(self, obj, field: str) -> bool:
+        from .models import SavedMessage
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return SavedMessage.objects.filter(
+            user=request.user, message=obj, **{field: True}
+        ).exists()
+
+    def get_is_favorite(self, obj):
+        return self._saved_flag(obj, 'is_favorite')
+
+    def get_is_pinned(self, obj):
+        return self._saved_flag(obj, 'is_pinned')
 
     def get_reactions(self, obj):
         request = self.context.get('request')
@@ -227,6 +244,7 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = [
             "id", "sender", "sender_profile", "recipient", "room", "parent", "parent_message", "replies_count", "content",
             "timestamp", "attachment", "is_read", "read_at", "call_event", "reactions",
+            "is_favorite", "is_pinned",
         ]
         read_only_fields = ["id", "sender", "sender_profile", "timestamp", "is_read", "read_at", "reactions", "parent_message", "replies_count"]
 

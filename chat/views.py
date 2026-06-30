@@ -35,7 +35,7 @@ from oauthlib.oauth2 import OAuth2Error
 from requests.exceptions import RequestException
 
 # Local imports
-from .models import Message, Room, Profile, Block, ProfileImage
+from .models import Message, Room, Profile, Block, ProfileImage, SavedMessage
 from .serializers import (
     MessageSerializer, RegisterSerializer, UserUpdateSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
@@ -630,75 +630,6 @@ class GroupChatView(generics.ListCreateAPIView):
             
         return Response(message_data, status=status.HTTP_201_CREATED)
 
-
-class AISaveResponseView(APIView):
-    """Sauvegarde une réponse IA comme message de l'assistant vers l'utilisateur connecté."""
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        content = request.data.get('content', '').strip()
-        if not content:
-            return Response({'error': 'Contenu requis'}, status=status.HTTP_400_BAD_REQUEST)
-
-        assistant = get_object_or_404(User, username=AI_USERNAME)
-        user = request.user
-
-        msg = Message.objects.create(
-            sender=assistant,
-            recipient=user,
-            content=content,
-        )
-
-        message_data = MessageSerializer(msg, context={'request': request}).data
-
-        # Broadcast sur le canal privé entre user et assistant
-        a, b = sorted([user.id, assistant.id])
-        pusher_client.trigger(f"private-chat-{a}-{b}", 'new-message', message_data)
-
-        conversation_id = int(f"{a}{b}")
-
-        # Sidebar : mettre à jour les deux côtés
-        pusher_client.trigger(
-            f"user-{user.id}-conversations",
-            'new-message',
-            {
-                'conversation': {
-                    'id': conversation_id,
-                    'name': get_user_display_name(assistant),
-                    'lastMessage': message_preview(msg),
-                    'timestamp': msg.timestamp.isoformat(),
-                    'isGroup': False,
-                    'userId': assistant.id,
-                    'user': UserSerializer(assistant, context={'request': request}).data,
-                    'incrementUnread': False,
-                    'lastMessageSeen': True,
-                    'lastMessageSenderId': assistant.id,
-                    'lastMessageIsRead': False,
-                }
-            }
-        )
-
-        pusher_client.trigger(
-            f"user-{assistant.id}-conversations",
-            'new-message',
-            {
-                'conversation': {
-                    'id': conversation_id,
-                    'name': get_user_display_name(user),
-                    'lastMessage': message_preview(msg),
-                    'timestamp': msg.timestamp.isoformat(),
-                    'isGroup': False,
-                    'userId': user.id,
-                    'user': UserSerializer(user, context={'request': request}).data,
-                    'incrementUnread': False,
-                    'lastMessageSeen': True,
-                    'lastMessageSenderId': assistant.id,
-                    'lastMessageIsRead': False,
-                }
-            }
-        )
-
-        return Response(message_data, status=status.HTTP_201_CREATED)
 
 class RoomListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -1467,3 +1398,68 @@ class ForwardMessageView(APIView):
                 )
 
         return Response(message_data, status=status.HTTP_201_CREATED)
+
+
+class ToggleFavoriteView(APIView):
+    """Basculer le statut favori d'un message."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        msg = get_object_or_404(Message, pk=pk)
+        saved, created = SavedMessage.objects.get_or_create(
+            user=request.user, message=msg,
+            defaults={'is_favorite': True},
+        )
+        if not created:
+            saved.is_favorite = not saved.is_favorite
+            saved.save(update_fields=['is_favorite'])
+            if not saved.is_favorite and not saved.is_pinned:
+                saved.delete()
+                return Response({'is_favorite': False, 'is_pinned': False})
+        return Response({
+            'is_favorite': saved.is_favorite,
+            'is_pinned': saved.is_pinned,
+        })
+
+
+class TogglePinView(APIView):
+    """Basculer le statut épinglé d'un message."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        msg = get_object_or_404(Message, pk=pk)
+        saved, created = SavedMessage.objects.get_or_create(
+            user=request.user, message=msg,
+            defaults={'is_pinned': True},
+        )
+        if not created:
+            saved.is_pinned = not saved.is_pinned
+            saved.save(update_fields=['is_pinned'])
+            if not saved.is_favorite and not saved.is_pinned:
+                saved.delete()
+                return Response({'is_favorite': False, 'is_pinned': False})
+        return Response({
+            'is_favorite': saved.is_favorite,
+            'is_pinned': saved.is_pinned,
+        })
+
+
+class SavedMessagesView(generics.ListAPIView):
+    """Liste des messages favoris et épinglés de l'utilisateur."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = MessageSerializer
+
+    def get_queryset(self):
+        qs = SavedMessage.objects.filter(user=self.request.user)
+        filter_type = self.request.query_params.get('type', 'all')
+        if filter_type == 'favorite':
+            qs = qs.filter(is_favorite=True)
+        elif filter_type == 'pinned':
+            qs = qs.filter(is_pinned=True)
+        return Message.objects.filter(
+            id__in=qs.values('message_id')
+        ).select_related(
+            'sender__profile', 'recipient__profile'
+        ).prefetch_related(
+            'reactions__user', 'saved_by'
+        ).order_by('-timestamp')

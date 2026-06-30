@@ -29,7 +29,9 @@ from .views import (
     ForwardMessageView,
     ProfileImageView,
     ProfileImageDeleteView,
-    AISaveResponseView,
+    ToggleFavoriteView,
+    TogglePinView,
+    SavedMessagesView,
 )
 from .call_views import CallStartView, CallRespondView, CallEndView, CallHistoryView
 
@@ -89,8 +91,10 @@ urlpatterns = [
     path('profile/images/<int:user_id>/', ProfileImageView.as_view(), name='profile-images-user'),
     path('profile/images/delete/<int:pk>/', ProfileImageDeleteView.as_view(), name='profile-image-delete'),
 
-    # Sauvegarde réponse IA
-    path('ai/save/', AISaveResponseView.as_view(), name='ai-save'),
+    # Messages favoris et épinglés
+    path('messages/<int:pk>/favorite/', ToggleFavoriteView.as_view(), name='message-favorite'),
+    path('messages/<int:pk>/pin/', TogglePinView.as_view(), name='message-pin'),
+    path('saved/', SavedMessagesView.as_view(), name='saved-messages'),
 
     # Blocage utilisateur
     path('users/<int:user_id>/block/', BlockUserView.as_view(), name='block-user'),
