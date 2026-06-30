@@ -45,7 +45,7 @@ from .serializers import (
 from .pusher_client import pusher_client
 from .call_service import message_preview
 from .utils import update_online_status, redis_client, redis_available, get_user_display_name, resolve_user_by_login_identifier
-from .groq_service import call_groq, AI_USERNAME, GROQ_API_URL
+from .groq_service import call_groq, AI_USERNAME
 
 # Configure logger and environment
 logger = logging.getLogger(__name__)
@@ -605,35 +605,100 @@ class GroupChatView(generics.ListCreateAPIView):
         if parent_msg and parent_msg.room_id != room_id:
             raise ValidationError({'parent': 'Le message parent doit appartenir à cette conversation de groupe.'})
 
-        try:
-            msg = serializer.save(sender=self.request.user, room_id=room_id)
-            # Sérialisation avec contexte
-            message_data = MessageSerializer(msg, context={'request': request}).data
-            pusher_client.trigger(f"group-chat-{room_id}", 'new-message', message_data)
+        msg = serializer.save(sender=self.request.user, room_id=room_id)
+        message_data = MessageSerializer(msg, context={'request': request}).data
+        pusher_client.trigger(f"group-chat-{room_id}", 'new-message', message_data)
+        
+        conversation_update = {
+            'conversation': {
+                'id': room.id,
+                'name': room.name,
+                'lastMessage': message_preview(msg),
+                'timestamp': msg.timestamp.isoformat(),
+                'isGroup': True,
+                'lastMessageSeen': False,
+                'lastMessageSenderId': self.request.user.id,
+                'lastMessageIsRead': False,
+            }
+        }
+        for participant in room.participants.all():
+            pusher_client.trigger(
+                f"user-{participant.id}-conversations",
+                'new-message',
+                conversation_update
+            )
             
-            # Notifier la sidebar de tous les participants
-            conversation_update = {
+        return Response(message_data, status=status.HTTP_201_CREATED)
+
+
+class AISaveResponseView(APIView):
+    """Sauvegarde une réponse IA comme message de l'assistant vers l'utilisateur connecté."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        content = request.data.get('content', '').strip()
+        if not content:
+            return Response({'error': 'Contenu requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        assistant = get_object_or_404(User, username=AI_USERNAME)
+        user = request.user
+
+        msg = Message.objects.create(
+            sender=assistant,
+            recipient=user,
+            content=content,
+        )
+
+        message_data = MessageSerializer(msg, context={'request': request}).data
+
+        # Broadcast sur le canal privé entre user et assistant
+        a, b = sorted([user.id, assistant.id])
+        pusher_client.trigger(f"private-chat-{a}-{b}", 'new-message', message_data)
+
+        conversation_id = int(f"{a}{b}")
+
+        # Sidebar : mettre à jour les deux côtés
+        pusher_client.trigger(
+            f"user-{user.id}-conversations",
+            'new-message',
+            {
                 'conversation': {
-                    'id': room.id,
-                    'name': room.name,
+                    'id': conversation_id,
+                    'name': get_user_display_name(assistant),
                     'lastMessage': message_preview(msg),
                     'timestamp': msg.timestamp.isoformat(),
-                    'isGroup': True,
-                    'lastMessageSeen': False,
-                    'lastMessageSenderId': self.request.user.id,
+                    'isGroup': False,
+                    'userId': assistant.id,
+                    'user': UserSerializer(assistant, context={'request': request}).data,
+                    'incrementUnread': False,
+                    'lastMessageSeen': True,
+                    'lastMessageSenderId': assistant.id,
                     'lastMessageIsRead': False,
                 }
             }
-            for participant in room.participants.all():
-                pusher_client.trigger(
-                    f"user-{participant.id}-conversations",
-                    'new-message',
-                    conversation_update
-                )
-                
-            return Response(message_data, status=status.HTTP_201_CREATED)
-        except IntegrityError as e:
-            raise e
+        )
+
+        pusher_client.trigger(
+            f"user-{assistant.id}-conversations",
+            'new-message',
+            {
+                'conversation': {
+                    'id': conversation_id,
+                    'name': get_user_display_name(user),
+                    'lastMessage': message_preview(msg),
+                    'timestamp': msg.timestamp.isoformat(),
+                    'isGroup': False,
+                    'userId': user.id,
+                    'user': UserSerializer(user, context={'request': request}).data,
+                    'incrementUnread': False,
+                    'lastMessageSeen': True,
+                    'lastMessageSenderId': assistant.id,
+                    'lastMessageIsRead': False,
+                }
+            }
+        )
+
+        return Response(message_data, status=status.HTTP_201_CREATED)
 
 class RoomListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
