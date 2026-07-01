@@ -29,10 +29,10 @@ from .views import (
     ForwardMessageView,
     ProfileImageView,
     ProfileImageDeleteView,
-    ToggleFavoriteView,
     TogglePinView,
-    SavedMessagesView,
-    AISaveResponseView,
+    PinnedMessagesView,
+    ToggleConversationFavoriteView,
+    AISendToConversationView,
 )
 from .call_views import CallStartView, CallRespondView, CallEndView, CallHistoryView
 
@@ -92,13 +92,15 @@ urlpatterns = [
     path('profile/images/<int:user_id>/', ProfileImageView.as_view(), name='profile-images-user'),
     path('profile/images/delete/<int:pk>/', ProfileImageDeleteView.as_view(), name='profile-image-delete'),
 
-    # Messages favoris et épinglés
-    path('messages/<int:pk>/favorite/', ToggleFavoriteView.as_view(), name='message-favorite'),
+    # Messages épinglés (dans une conversation)
     path('messages/<int:pk>/pin/', TogglePinView.as_view(), name='message-pin'),
-    path('saved/', SavedMessagesView.as_view(), name='saved-messages'),
+    path('pinned/', PinnedMessagesView.as_view(), name='pinned-messages'),
+
+    # Conversations favorites (étoilées)
+    path('conversations/favorite/', ToggleConversationFavoriteView.as_view(), name='toggle-conversation-favorite'),
 
     # Sauvegarde réponse IA
-    path('ai/save/', AISaveResponseView.as_view(), name='ai-save'),
+    path('ai/send-to-conversation/', AISendToConversationView.as_view(), name='ai-send-to-conversation'),
 
     # Blocage utilisateur
     path('users/<int:user_id>/block/', BlockUserView.as_view(), name='block-user'),

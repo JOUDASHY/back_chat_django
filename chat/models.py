@@ -111,6 +111,7 @@ class Message(models.Model):
     is_read = models.BooleanField(default=False)
     read_at = models.DateTimeField(null=True, blank=True)
     call_event = models.JSONField(null=True, blank=True)
+    is_ai_response = models.BooleanField(default=False)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -193,8 +194,27 @@ class ProfileImage(models.Model):
         return f"Image #{self.id} de {self.user.username}"
 
 
+class FavoriteConversation(models.Model):
+    """Conversation favorite (étoilée) par un utilisateur."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='favorite_conversations')
+    room = models.ForeignKey('Room', on_delete=models.CASCADE, null=True, blank=True)
+    other_user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='conversation_favorited_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'room'], name='unique_fav_conv_room'),
+            models.UniqueConstraint(fields=['user', 'other_user'], name='unique_fav_conv_private'),
+        ]
+
+    def __str__(self):
+        if self.room:
+            return f"{self.user.username} ★ room {self.room.id}"
+        return f"{self.user.username} ★ {self.other_user_id}"
+
+
 class SavedMessage(models.Model):
-    """Message favori ou épinglé par un utilisateur."""
+    """Message épinglé par un utilisateur."""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_messages')
     message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name='saved_by')
     is_favorite = models.BooleanField(default=False)

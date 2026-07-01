@@ -35,7 +35,7 @@ from oauthlib.oauth2 import OAuth2Error
 from requests.exceptions import RequestException
 
 # Local imports
-from .models import Message, Room, Profile, Block, ProfileImage, SavedMessage
+from .models import Message, Room, Profile, Block, ProfileImage, SavedMessage, FavoriteConversation
 from .serializers import (
     MessageSerializer, RegisterSerializer, UserUpdateSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
@@ -488,14 +488,51 @@ class ConversationCreateView(APIView):
 
 
 
+class ToggleConversationFavoriteView(APIView):
+    """Marquer/démarquer une conversation comme favorite."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        room_id = request.data.get('room_id')
+        user_id = request.data.get('user_id')  # other user for private
+        user = request.user
+
+        if room_id:
+            fav, created = FavoriteConversation.objects.get_or_create(
+                user=user, room_id=room_id
+            )
+            if not created:
+                fav.delete()
+            return Response({'is_favorite': created})
+        elif user_id:
+            user_id = int(user_id)
+            fav, created = FavoriteConversation.objects.get_or_create(
+                user=user, other_user_id=user_id
+            )
+            if not created:
+                fav.delete()
+            return Response({'is_favorite': created})
+        else:
+            return Response({'error': 'room_id ou user_id requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+
 class ConversationListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         user = request.user
+        favorites_only = request.query_params.get('favorites') == 'true'
+
+        # Récupérer les conversations favorites de l'utilisateur
+        fav_convs = FavoriteConversation.objects.filter(user=user)
+        fav_room_ids = set(fav_convs.filter(room__isnull=False).values_list('room_id', flat=True))
+        fav_user_ids = set(fav_convs.filter(other_user__isnull=False).values_list('other_user_id', flat=True))
 
         # Conversations de groupe
-        rooms = Room.objects.filter(participants=user).prefetch_related('participants__profile')
+        rooms_qs = Room.objects.filter(participants=user)
+        if favorites_only:
+            rooms_qs = rooms_qs.filter(id__in=fav_room_ids)
+        rooms = rooms_qs.prefetch_related('participants__profile')
         group_data = []
         for room in rooms:
             last = (
@@ -534,12 +571,16 @@ class ConversationListView(APIView):
                     'lastMessageSeen': last.sender_id == user.id or last.is_read,
                     'lastMessageSenderId': last.sender_id,
                     'lastMessageIsRead': last.is_read,
+                    'is_favorite': room.id in fav_room_ids,
                 })
 
         # Conversations privées
-        other_users = User.objects.filter(
+        other_users_qs = User.objects.filter(
             Q(sent_messages__recipient=user) | Q(received_messages__sender=user)
         ).distinct()
+        if favorites_only:
+            other_users_qs = other_users_qs.filter(id__in=fav_user_ids)
+        other_users = other_users_qs
 
         private_data = []
         for other_user in other_users:
@@ -573,7 +614,8 @@ class ConversationListView(APIView):
                     'lastMessageSeen': last_message_seen,
                     'lastMessageSenderId': last_message.sender_id if last_message else None,
                     'lastMessageIsRead': last_message.is_read if last_message else True,
-                    'user': user_serializer.data
+                    'user': user_serializer.data,
+                    'is_favorite': other_user.id in fav_user_ids,
                 })
 
         data = group_data + private_data
@@ -631,47 +673,49 @@ class GroupChatView(generics.ListCreateAPIView):
         return Response(message_data, status=status.HTTP_201_CREATED)
 
 
-class AISaveResponseView(APIView):
-    """Sauvegarde une réponse IA comme message de l'assistant vers l'utilisateur connecté."""
+class AISendToConversationView(APIView):
+    """Sauvegarde une réponse IA comme message dans la conversation actuelle (sender=user, recipient=other_user)."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         content = request.data.get('content', '').strip()
-        if not content:
-            return Response({'error': 'Contenu requis'}, status=status.HTTP_400_BAD_REQUEST)
+        recipient_id = request.data.get('recipient_id')
+        if not content or not recipient_id:
+            return Response({'error': 'Contenu et recipient_id requis'}, status=status.HTTP_400_BAD_REQUEST)
 
-        assistant = get_object_or_404(User, username=AI_USERNAME)
+        recipient = get_object_or_404(User, pk=recipient_id)
         user = request.user
 
         msg = Message.objects.create(
-            sender=assistant,
-            recipient=user,
+            sender=user,
+            recipient=recipient,
             content=content,
+            is_ai_response=True,
         )
 
         message_data = MessageSerializer(msg, context={'request': request}).data
 
-        a, b = sorted([user.id, assistant.id])
+        a, b = sorted([user.id, recipient.id])
         pusher_client.trigger(f"private-chat-{a}-{b}", 'new-message', message_data)
 
         conversation_id = int(f"{a}{b}")
 
-        for uid, is_recipient in [(user.id, False), (assistant.id, True)]:
+        for uid, is_recipient in [(user.id, False), (recipient.id, True)]:
             pusher_client.trigger(
                 f"user-{uid}-conversations",
                 'new-message',
                 {
                     'conversation': {
                         'id': conversation_id,
-                        'name': get_user_display_name(assistant if uid == user.id else user),
+                        'name': get_user_display_name(recipient if uid == user.id else user),
                         'lastMessage': message_preview(msg),
                         'timestamp': msg.timestamp.isoformat(),
                         'isGroup': False,
-                        'userId': assistant.id if uid == user.id else user.id,
-                        'user': UserSerializer(assistant if uid == user.id else user, context={'request': request}).data,
+                        'userId': recipient.id if uid == user.id else user.id,
+                        'user': UserSerializer(recipient if uid == user.id else user, context={'request': request}).data,
                         'incrementUnread': is_recipient,
                         'lastMessageSeen': not is_recipient,
-                        'lastMessageSenderId': assistant.id,
+                        'lastMessageSenderId': user.id,
                         'lastMessageIsRead': False,
                     }
                 }
@@ -1449,28 +1493,6 @@ class ForwardMessageView(APIView):
         return Response(message_data, status=status.HTTP_201_CREATED)
 
 
-class ToggleFavoriteView(APIView):
-    """Basculer le statut favori d'un message."""
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, pk):
-        msg = get_object_or_404(Message, pk=pk)
-        saved, created = SavedMessage.objects.get_or_create(
-            user=request.user, message=msg,
-            defaults={'is_favorite': True},
-        )
-        if not created:
-            saved.is_favorite = not saved.is_favorite
-            saved.save(update_fields=['is_favorite'])
-            if not saved.is_favorite and not saved.is_pinned:
-                saved.delete()
-                return Response({'is_favorite': False, 'is_pinned': False})
-        return Response({
-            'is_favorite': saved.is_favorite,
-            'is_pinned': saved.is_pinned,
-        })
-
-
 class TogglePinView(APIView):
     """Basculer le statut épinglé d'un message."""
     permission_classes = [IsAuthenticated]
@@ -1512,3 +1534,70 @@ class SavedMessagesView(generics.ListAPIView):
         ).prefetch_related(
             'reactions__user', 'saved_by'
         ).order_by('-timestamp')
+
+
+class PinnedMessagesView(APIView):
+    """Messages épinglés dans une conversation spécifique."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_id = request.query_params.get('user_id')
+        room_id = request.query_params.get('room_id')
+
+        msg_filter = Q()
+        if user_id:
+            msg_filter = Q(sender_id=request.user.id, recipient_id=user_id) | Q(sender_id=user_id, recipient_id=request.user.id)
+        elif room_id:
+            msg_filter = Q(room_id=room_id)
+        else:
+            return Response({'error': 'user_id ou room_id requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        pinned_ids = SavedMessage.objects.filter(
+            user=request.user, is_pinned=True, message__in=Message.objects.filter(msg_filter)
+        ).values('message_id')
+
+        messages = Message.objects.filter(
+            id__in=pinned_ids
+        ).select_related(
+            'sender__profile', 'recipient__profile'
+        ).prefetch_related(
+            'reactions__user', 'saved_by'
+        ).order_by('-timestamp')
+
+        serializer = MessageSerializer(messages, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+
+
+
+class ConversationFavoritesView(APIView):
+    """Messages favoris dans une conversation spécifique."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user_id = request.query_params.get('user_id')
+        room_id = request.query_params.get('room_id')
+
+        msg_filter = Q()
+        if user_id:
+            msg_filter = Q(sender_id=request.user.id, recipient_id=user_id) | Q(sender_id=user_id, recipient_id=request.user.id)
+        elif room_id:
+            msg_filter = Q(room_id=room_id)
+        else:
+            return Response({'error': 'user_id ou room_id requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        fav_ids = SavedMessage.objects.filter(
+            user=request.user, is_favorite=True, message__in=Message.objects.filter(msg_filter)
+        ).values('message_id')
+
+        messages = Message.objects.filter(
+            id__in=fav_ids
+        ).select_related(
+            'sender__profile', 'recipient__profile'
+        ).prefetch_related(
+            'reactions__user', 'saved_by'
+        ).order_by('-timestamp')
+
+        serializer = MessageSerializer(messages, many=True, context={'request': request})
+        return Response(serializer.data)
