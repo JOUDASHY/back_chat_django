@@ -234,6 +234,60 @@ class SavedMessage(models.Model):
         return f"{' '.join(parts)} msg#{self.message_id}"
 
 
+class GroupCall(models.Model):
+    CALL_TYPE_CHOICES = [('audio', 'Audio'), ('video', 'Vidéo')]
+    STATUS_CHOICES = [
+        ('ringing', 'Sonnerie'),
+        ('active', 'Actif'),
+        ('completed', 'Terminé'),
+        ('missed', 'Manqué'),
+        ('cancelled', 'Annulé'),
+    ]
+
+    room_name = models.CharField(max_length=120, unique=True)
+    caller = models.ForeignKey(User, on_delete=models.CASCADE, related_name='group_calls_made')
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='group_calls', null=True, blank=True)
+    call_type = models.CharField(max_length=10, choices=CALL_TYPE_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ringing')
+    started_at = models.DateTimeField(auto_now_add=True)
+    answered_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    duration_seconds = models.PositiveIntegerField(default=0)
+    ended_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='group_calls_ended'
+    )
+    message = models.OneToOneField(
+        Message, null=True, blank=True, on_delete=models.SET_NULL, related_name='group_call_log'
+    )
+
+    class Meta:
+        ordering = ['-started_at']
+
+    def __str__(self):
+        return f"Group {self.call_type} {self.status} room={self.room_id} caller={self.caller_id}"
+
+
+class GroupCallParticipant(models.Model):
+    STATUS_CHOICES = [
+        ('ringing', 'Sonnerie'),
+        ('joined', 'Accepté'),
+        ('rejected', 'Refusé'),
+        ('missed', 'Manqué'),
+    ]
+
+    call = models.ForeignKey(GroupCall, on_delete=models.CASCADE, related_name='participants')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='group_call_participations')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ringing')
+    joined_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('call', 'user')
+
+    def __str__(self):
+        return f"{self.user.username} in call#{self.call_id}: {self.status}"
+
+
 class Block(models.Model):
     """User1 bloque User2 — relation directionnelle."""
     blocker = models.ForeignKey(User, on_delete=models.CASCADE, related_name='blocking')

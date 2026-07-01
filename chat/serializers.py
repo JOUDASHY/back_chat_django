@@ -89,7 +89,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         
 
 
-from .models import Message, Room
+from .models import GroupCall, GroupCallParticipant, Message, Room
 from .reaction_utils import serialize_message_reactions
 
 User = get_user_model()
@@ -435,3 +435,25 @@ class ProfileImageSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
+
+
+class GroupCallParticipantSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = GroupCallParticipant
+        fields = ['id', 'user', 'status', 'joined_at', 'rejected_at']
+
+
+class GroupCallSerializer(serializers.ModelSerializer):
+    caller = UserSerializer(read_only=True)
+    participants = GroupCallParticipantSerializer(many=True, read_only=True)
+    room_name = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = GroupCall
+        fields = [
+            'id', 'room_name', 'caller', 'room', 'call_type', 'status',
+            'started_at', 'answered_at', 'ended_at', 'duration_seconds',
+            'ended_by', 'participants',
+        ]

@@ -35,6 +35,7 @@ from .views import (
     AISendToConversationView,
 )
 from .call_views import CallStartView, CallRespondView, CallEndView, CallHistoryView
+from .group_call_views import GroupCallStartView, GroupCallRespondView, GroupCallEndView, GroupCallHistoryView
 
 app_name = 'chat'
 
@@ -86,6 +87,12 @@ urlpatterns = [
     path('calls/respond/', CallRespondView.as_view(), name='call-respond'),
     path('calls/end/', CallEndView.as_view(), name='call-end'),
     path('calls/history/', CallHistoryView.as_view(), name='call-history'),
+
+    # Appels de groupe (LiveKit)
+    path('group-calls/start/', GroupCallStartView.as_view(), name='group-call-start'),
+    path('group-calls/respond/', GroupCallRespondView.as_view(), name='group-call-respond'),
+    path('group-calls/end/', GroupCallEndView.as_view(), name='group-call-end'),
+    path('group-calls/history/', GroupCallHistoryView.as_view(), name='group-call-history'),
 
     # Images de collection du profil
     path('profile/images/', ProfileImageView.as_view(), name='profile-images'),
